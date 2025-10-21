@@ -63,6 +63,23 @@ void setup() {
     Serial.println("  Free Car - 자율주행차 시스템 시작");
     Serial.println("============================================");
     delay(1000);
+
+
+    // 8. 초기 하드웨어 테스트 (모터 + LED)
+    Serial.println("\n[단계 6] 하드웨어 테스트 시작");
+    Serial.println("⚙️  모터 직진 테스트 + LED 점등 (2초)");
+    
+    // 모터 전진 + LED 켜기
+    moveForward();
+    turnOnLED();
+    
+    // 2초 대기
+    delay(100);
+    
+    // 모터 정지 + LED 끄기
+    stopMotor();
+    turnOffLED();
+    delay(500);
     
     // 2. WiFi 연결
     Serial.println("\n[단계 1] WiFi 연결");
@@ -108,6 +125,10 @@ void setup() {
     Serial.printf("💡 LED 제어: http://%s/led?state=[on|off|toggle]\n", WiFi.localIP().toString().c_str());
     Serial.printf("📊 상태: http://%s/status\n", WiFi.localIP().toString().c_str());
     Serial.println("============================================\n");
+    
+
+    
+    Serial.println("✅ 하드웨어 테스트 완료\n");
 }
 
 
