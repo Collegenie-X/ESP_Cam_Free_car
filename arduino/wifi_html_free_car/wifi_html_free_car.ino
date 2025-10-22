@@ -15,7 +15,7 @@
 #include "esp_http_server.h"   // ESP32 HTTP server library, used to handle Web requests
 
 // Replace with your network credentials
-const char *ssid = "Kim";      // Set to your Wi-Fi name
+const char *ssid = "edu";      // Set to your Wi-Fi name
 const char *password = "12345678";  // Set to your Wi-Fi passwords
 
 //Set camera pins
@@ -356,19 +356,24 @@ static esp_err_t action_handler(httpd_req_t *req) {
 
   if (httpd_req_get_url_query_str(req, query, len) == ESP_OK) {
     if (strstr(query, "go=forward")) {
-      // Forward
-      Serial.println("Forward");
-      analogWrite(MOTOR_R_PIN_1, 0);
-      analogWrite(MOTOR_R_PIN_2, MOTOR_R_Speed);
-      analogWrite(MOTOR_L_PIN_1, MOTOR_L_Speed);
-      analogWrite(MOTOR_L_PIN_2, 0);
-    } else if (strstr(query, "go=backward")) {
+
+
       // Backward
       Serial.println("Backward");
       analogWrite(MOTOR_R_PIN_1, MOTOR_R_Speed);
       analogWrite(MOTOR_R_PIN_2, 0);
       analogWrite(MOTOR_L_PIN_1, 0);
       analogWrite(MOTOR_L_PIN_2, MOTOR_L_Speed);
+      
+    } else if (strstr(query, "go=backward")) {
+
+      // Forward
+      Serial.println("Forward");
+      analogWrite(MOTOR_R_PIN_1, 0);
+      analogWrite(MOTOR_R_PIN_2, MOTOR_R_Speed);
+      analogWrite(MOTOR_L_PIN_1, MOTOR_L_Speed);
+      analogWrite(MOTOR_L_PIN_2, 0);
+   
     } else if (strstr(query, "go=left")) {
       // Left
       Serial.println("Left");

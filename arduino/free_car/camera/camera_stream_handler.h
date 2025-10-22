@@ -5,9 +5,11 @@
 #include "esp_http_server.h"
 
 // MJPEG 스트림 경계 문자열
-#define STREAM_BOUNDARY "123456789000000000000987654321"
-#define STREAM_CONTENT_TYPE "multipart/x-mixed-replace;boundary=" STREAM_BOUNDARY
-#define STREAM_BOUNDARY_PART "_STREAM_PART: " STREAM_BOUNDARY "\r\n"
+// 표준 MJPEG 경계 및 콘텐츠 타입 정의
+#define STREAM_BOUNDARY "frame"
+#define STREAM_CONTENT_TYPE "multipart/x-mixed-replace; boundary=" STREAM_BOUNDARY
+// 각 프레임 시작 시 전송되는 경계 문자열 ("--boundary\r\n")
+#define STREAM_BOUNDARY_PART "--" STREAM_BOUNDARY "\r\n"
 
 /**
  * 단일 프레임 전송 함수
@@ -39,6 +41,11 @@ esp_err_t sendFrame(httpd_req_t *req, camera_fb_t *fb) {
     
     // 프레임 데이터 전송
     if (httpd_resp_send_chunk(req, (const char *)fb->buf, fb->len) != ESP_OK) {
+        return ESP_FAIL;
+    }
+
+    // 프레임 종료를 위한 CRLF 전송
+    if (httpd_resp_send_chunk(req, "\r\n", 2) != ESP_OK) {
         return ESP_FAIL;
     }
     
@@ -80,6 +87,14 @@ esp_err_t streamHandler(httpd_req_t *req) {
         // 프레임 버퍼 반환
         esp_camera_fb_return(fb);
         fb = NULL;
+        
+        // CPU 및 다른 요청 처리를 위한 대기 (50ms)
+        // 이를 통해 다른 HTTP 요청도 처리 가능 (약 20 FPS)
+        // 20 FPS도 충분히 부드러운 영상이며, 제어 응답성이 크게 향상됨
+        delay(50);
+        
+        // 태스크 스케줄러에게 제어권 양보 (다른 HTTP 요청 처리 보장)
+        taskYIELD();
     }
     
     // 정리

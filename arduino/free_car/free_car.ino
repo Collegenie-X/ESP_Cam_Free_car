@@ -123,6 +123,8 @@ void setup() {
     Serial.printf("📹 스트리밍: http://%s/stream\n", WiFi.localIP().toString().c_str());
     Serial.printf("🎮 모터 제어: http://%s/control?cmd=[left|right|center|stop]\n", WiFi.localIP().toString().c_str());
     Serial.printf("💡 LED 제어: http://%s/led?state=[on|off|toggle]\n", WiFi.localIP().toString().c_str());
+    Serial.printf("⚡ 속도 제어: http://%s/speed?op=[plus|minus]&step=10\n", WiFi.localIP().toString().c_str());
+    Serial.printf("📷 카메라 제어: http://%s/camera?param=[brightness|agc_gain]&value=N\n", WiFi.localIP().toString().c_str());
     Serial.printf("📊 상태: http://%s/status\n", WiFi.localIP().toString().c_str());
     Serial.println("============================================\n");
     

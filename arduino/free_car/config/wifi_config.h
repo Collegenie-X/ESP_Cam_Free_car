@@ -4,7 +4,7 @@
 #include <WiFi.h>
 
 // WiFi 설정 상수
-const char* WIFI_SSID = "Kim";                // WiFi 이름
+const char* WIFI_SSID = "edu";                // WiFi 이름
 const char* WIFI_PASSWORD = "12345678";       // WiFi 비밀번호
 const int WIFI_CONNECT_TIMEOUT = 20000;       // WiFi 연결 타임아웃 (ms)
 

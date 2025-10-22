@@ -278,6 +278,53 @@ int getMotorSpeed() {
 }
 
 /**
+ * 모터 속도 증가 함수
+ * @param step 증가량 (기본 10)
+ * @return 증가 후 속도
+ */
+int increaseMotorSpeed(int step = 10) {
+    if (step < 0) step = 0; // early guard
+    int newSpeed = currentSpeed + step;
+    if (newSpeed > MOTOR_SPEED_MAX) newSpeed = MOTOR_SPEED_MAX;
+    setMotorSpeed(newSpeed);
+    // 현재 동작이 전진/회전 등인 경우 즉시 반영
+    switch (currentCommand) {
+        case CENTER: moveForwardWithSpeed(newSpeed); break;
+        case LEFT:   turnLeftWithSpeed(newSpeed); break;
+        case RIGHT:  turnRightWithSpeed(newSpeed); break;
+        default: break; // STOP 등은 속도만 업데이트
+    }
+    return currentSpeed;
+}
+
+/**
+ * 모터 속도 감소 함수
+ * @param step 감소량 (기본 10)
+ * @return 감소 후 속도
+ */
+int decreaseMotorSpeed(int step = 10) {
+    if (step < 0) step = 0; // early guard
+    int newSpeed = currentSpeed - step;
+    if (newSpeed < 0) newSpeed = 0;
+    setMotorSpeed(newSpeed);
+    switch (currentCommand) {
+        case CENTER: moveForwardWithSpeed(newSpeed); break;
+        case LEFT:   turnLeftWithSpeed(newSpeed); break;
+        case RIGHT:  turnRightWithSpeed(newSpeed); break;
+        default: break;
+    }
+    return currentSpeed;
+}
+
+/**
+ * 모터 동작 여부 반환 함수
+ * @return true(동작 중) / false(정지)
+ */
+bool isMotorRunning() {
+    return currentCommand != STOP && currentSpeed > 0;
+}
+
+/**
  * 개별 모터 제어 함수 (고급 기능)
  * @param leftSpeed 왼쪽 모터 속도 (-255 ~ 255, 음수는 후진)
  * @param rightSpeed 오른쪽 모터 속도 (-255 ~ 255, 음수는 후진)

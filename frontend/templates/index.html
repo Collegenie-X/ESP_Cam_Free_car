@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ config.UI_TEXT.app_title }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- 헤더 -->
+        <header class="header">
+            <h1>{{ config.UI_TEXT.app_title }}</h1>
+            <div class="connection-status">
+                <span id="connection-indicator" class="indicator disconnected"></span>
+                <span id="connection-text">{{ config.UI_TEXT.connection_checking }}</span>
+            </div>
+        </header>
+
+        <!-- 메인 컨텐츠 (3열 레이아웃) -->
+        <div class="main-content">
+            <!-- 1열: 카메라 및 상태 -->
+            <div class="column column-left">
+                <!-- 카메라 스트림 -->
+                <div class="stream-section">
+                    <div class="section-header">
+                        <h2>{{ config.UI_TEXT.video_title }}</h2>
+                        <span class="fps-counter" id="fps-counter">FPS: --</span>
+                    </div>
+                    <div class="stream-container">
+                        <img id="camera-stream" alt="카메라 스트림" 
+                             onerror="handleStreamError()">
+                        <div class="stream-overlay" id="stream-overlay">
+                            <p>카메라 연결 중...</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 상태 정보 -->
+                <div class="status-panel">
+                    <h3>{{ config.UI_TEXT.status_title }}</h3>
+                    <div class="status-grid">
+                        <div class="status-item">
+                            <span class="label">IP 주소:</span>
+                            <span id="ip-address" class="value">{{ esp32_ip }}</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">모터 상태:</span>
+                            <span id="motor-status" class="value">-</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">현재 명령:</span>
+                            <span id="current-command" class="value">-</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">속도:</span>
+                            <span id="speed-value" class="value">-</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">LED 상태:</span>
+                            <span id="led-status" class="value">-</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="label">밝기:</span>
+                            <span id="brightness-value" class="value">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2열: 모터 및 LED 제어 -->
+            <div class="column column-center">
+                <!-- 모터 제어 -->
+                <div class="control-panel">
+                    <h3>{{ config.UI_TEXT.motor_title }}</h3>
+                    <div class="motor-controls">
+                        <div class="motor-grid">
+                            <div></div>
+                            <button class="btn-control btn-forward" 
+                                    onmousedown="sendControl('center')" 
+                                    onmouseup="sendControl('stop')"
+                                    ontouchstart="sendControl('center')" 
+                                    ontouchend="sendControl('stop')">
+                                {{ config.UI_TEXT.motor_forward }}
+                            </button>
+                            <div></div>
+                            
+                            <button class="btn-control btn-left" 
+                                    onmousedown="sendControl('left')" 
+                                    onmouseup="sendControl('stop')"
+                                    ontouchstart="sendControl('left')" 
+                                    ontouchend="sendControl('stop')">
+                                {{ config.UI_TEXT.motor_left }}
+                            </button>
+                            <button class="btn-control btn-stop" onclick="sendControl('stop')">
+                                {{ config.UI_TEXT.motor_stop }}
+                            </button>
+                            <button class="btn-control btn-right" 
+                                    onmousedown="sendControl('right')" 
+                                    onmouseup="sendControl('stop')"
+                                    ontouchstart="sendControl('right')" 
+                                    ontouchend="sendControl('stop')">
+                                {{ config.UI_TEXT.motor_right }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 속도 제어 -->
+                <div class="control-panel">
+                    <h3>{{ config.UI_TEXT.speed_title }}</h3>
+                    <div class="speed-controls">
+                        <button class="btn-speed btn-speed-down" onclick="sendSpeed('minus', {{ config.SPEED_DEFAULT_STEP }})">
+                            {{ config.UI_TEXT.speed_down }}
+                        </button>
+                        <div class="speed-display">
+                            <span id="speed-display">--</span>
+                        </div>
+                        <button class="btn-speed btn-speed-up" onclick="sendSpeed('plus', {{ config.SPEED_DEFAULT_STEP }})">
+                            {{ config.UI_TEXT.speed_up }}
+                        </button>
+                    </div>
+                </div>
+
+                <!-- LED 제어 (토글 스위치) -->
+                <div class="control-panel">
+                    <h3>{{ config.UI_TEXT.led_title }}</h3>
+                    <div class="led-controls">
+                        <div class="led-toggle-wrapper">
+                            <span class="led-label">LED 상태</span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="led-toggle" onchange="toggleLED()">
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <span class="led-status-text" id="led-toggle-status">OFF</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 활동 로그 (2열에 배치) -->
+                <div class="control-panel">
+                    <h3>{{ config.UI_TEXT.log_title }}</h3>
+                    <div id="log-container" class="log-container"></div>
+                    <button class="btn-secondary btn-clear-log" onclick="clearLog()">{{ config.UI_TEXT.log_clear }}</button>
+                </div>
+            </div>
+
+            <!-- 3열: 카메라 설정 -->
+            <div class="column column-right">
+                <!-- 카메라 설정 -->
+                <div class="control-panel">
+                    <h3>{{ config.UI_TEXT.camera_title }}</h3>
+                    <div class="camera-controls">
+                        <!-- 기본 설정 -->
+                        <div class="camera-section">
+                            <h4 class="camera-section-title">🌟 기본 설정</h4>
+                            
+                            <div class="slider-group">
+                                <label for="brightness-slider">{{ config.CAMERA_PARAMS.brightness.name }} ({{ config.CAMERA_PARAMS.brightness.min }} ~ {{ config.CAMERA_PARAMS.brightness.max }}):</label>
+                                <input type="range" id="brightness-slider" 
+                                       min="{{ config.CAMERA_PARAMS.brightness.device_min or config.CAMERA_PARAMS.brightness.min }}" 
+                                       max="{{ config.CAMERA_PARAMS.brightness.device_max or config.CAMERA_PARAMS.brightness.max }}" 
+                                       value="{{ config.CAMERA_PARAMS.brightness.default }}" 
+                                       step="{{ config.CAMERA_PARAMS.brightness.step }}"
+                                       oninput="updateCamera('brightness', this.value)">
+                                <span id="brightness-display">{{ config.CAMERA_PARAMS.brightness.default }}</span>
+                            </div>
+                            
+                            <div class="slider-group">
+                                <label for="contrast-slider">{{ config.CAMERA_PARAMS.contrast.name }} ({{ config.CAMERA_PARAMS.contrast.min }} ~ {{ config.CAMERA_PARAMS.contrast.max }}):</label>
+                                <input type="range" id="contrast-slider" 
+                                       min="{{ config.CAMERA_PARAMS.contrast.device_min or config.CAMERA_PARAMS.contrast.min }}" 
+                                       max="{{ config.CAMERA_PARAMS.contrast.device_max or config.CAMERA_PARAMS.contrast.max }}" 
+                                       value="{{ config.CAMERA_PARAMS.contrast.default }}" 
+                                       step="{{ config.CAMERA_PARAMS.contrast.step }}"
+                                       oninput="updateCamera('contrast', this.value)">
+                                <span id="contrast-display">{{ config.CAMERA_PARAMS.contrast.default }}</span>
+                            </div>
+                            
+                            <div class="slider-group">
+                                <label for="saturation-slider">{{ config.CAMERA_PARAMS.saturation.name }} ({{ config.CAMERA_PARAMS.saturation.min }} ~ {{ config.CAMERA_PARAMS.saturation.max }}):</label>
+                                <input type="range" id="saturation-slider" 
+                                       min="{{ config.CAMERA_PARAMS.saturation.device_min or config.CAMERA_PARAMS.saturation.min }}" 
+                                       max="{{ config.CAMERA_PARAMS.saturation.device_max or config.CAMERA_PARAMS.saturation.max }}" 
+                                       value="{{ config.CAMERA_PARAMS.saturation.default }}" 
+                                       step="{{ config.CAMERA_PARAMS.saturation.step }}"
+                                       oninput="updateCamera('saturation', this.value)">
+                                <span id="saturation-display">{{ config.CAMERA_PARAMS.saturation.default }}</span>
+                            </div>
+                            
+                        </div>
+                        
+                        <!-- 노출 설정 -->
+                        <div class="camera-section">
+                            <h4 class="camera-section-title">💡 노출/게인 설정</h4>
+                            
+                            <div class="slider-group">
+                                <label for="agc-slider">{{ config.CAMERA_PARAMS.agc_gain.name }} ({{ config.CAMERA_PARAMS.agc_gain.min }} ~ {{ config.CAMERA_PARAMS.agc_gain.max }}):</label>
+                                <input type="range" id="agc-slider" 
+                                       min="{{ config.CAMERA_PARAMS.agc_gain.device_min or config.CAMERA_PARAMS.agc_gain.min }}" 
+                                       max="{{ config.CAMERA_PARAMS.agc_gain.device_max or config.CAMERA_PARAMS.agc_gain.max }}" 
+                                       value="{{ config.CAMERA_PARAMS.agc_gain.default }}" 
+                                       step="{{ config.CAMERA_PARAMS.agc_gain.step }}"
+                                       oninput="updateCamera('agc_gain', this.value)">
+                                <span id="agc-display">{{ config.CAMERA_PARAMS.agc_gain.default }}</span>
+                            </div>
+                            
+                            <div class="slider-group">
+                                <label for="gainceiling-slider">{{ config.CAMERA_PARAMS.gainceiling.name }} ({{ config.CAMERA_PARAMS.gainceiling.min }} ~ {{ config.CAMERA_PARAMS.gainceiling.max }}):</label>
+                                <input type="range" id="gainceiling-slider" 
+                                       min="{{ config.CAMERA_PARAMS.gainceiling.device_min or config.CAMERA_PARAMS.gainceiling.min }}" 
+                                       max="{{ config.CAMERA_PARAMS.gainceiling.device_max or config.CAMERA_PARAMS.gainceiling.max }}" 
+                                       value="{{ config.CAMERA_PARAMS.gainceiling.default }}" 
+                                       step="{{ config.CAMERA_PARAMS.gainceiling.step }}"
+                                       oninput="updateCamera('gainceiling', this.value)">
+                                <span id="gainceiling-display">{{ config.CAMERA_PARAMS.gainceiling.default }}</span>
+                            </div>
+                            
+                            <div class="slider-group">
+                                <label for="aec-slider">{{ config.CAMERA_PARAMS.aec_value.name }} ({{ config.CAMERA_PARAMS.aec_value.min }} ~ {{ config.CAMERA_PARAMS.aec_value.max }}):</label>
+                                <input type="range" id="aec-slider" 
+                                       min="{{ config.CAMERA_PARAMS.aec_value.device_min or config.CAMERA_PARAMS.aec_value.min }}" 
+                                       max="{{ config.CAMERA_PARAMS.aec_value.device_max or config.CAMERA_PARAMS.aec_value.max }}" 
+                                       value="{{ config.CAMERA_PARAMS.aec_value.default }}" 
+                                       step="{{ config.CAMERA_PARAMS.aec_value.step }}"
+                                       oninput="updateCamera('aec_value', this.value)">
+                                <span id="aec-display">{{ config.CAMERA_PARAMS.aec_value.default }}</span>
+                            </div>
+                            
+                            
+                            <div class="slider-group">
+                                <label for="aec2-slider">{{ config.CAMERA_PARAMS.aec2.name }} (0=끄기, 1=켜기):</label>
+                                <input type="range" id="aec2-slider" 
+                                       min="{{ config.CAMERA_PARAMS.aec2.device_min or config.CAMERA_PARAMS.aec2.min }}" 
+                                       max="{{ config.CAMERA_PARAMS.aec2.device_max or config.CAMERA_PARAMS.aec2.max }}" 
+                                       value="{{ config.CAMERA_PARAMS.aec2.default }}" 
+                                       step="{{ config.CAMERA_PARAMS.aec2.step }}"
+                                       oninput="updateCamera('aec2', this.value)">
+                                <span id="aec2-display">{{ config.CAMERA_PARAMS.aec2.default }}</span>
+                            </div>
+                        </div>
+                        
+                        <!-- 품질/노이즈 설정 -->
+                        <div class="camera-section">
+                            <h4 class="camera-section-title">🖼️ 품질/노이즈</h4>
+                            
+                            <div class="slider-group">
+                                <label for="quality-slider">{{ config.CAMERA_PARAMS.quality.name }} ({{ config.CAMERA_PARAMS.quality.min }} ~ {{ config.CAMERA_PARAMS.quality.max }}, 낮을수록 고품질):</label>
+                                <input type="range" id="quality-slider" 
+                                       min="{{ config.CAMERA_PARAMS.quality.device_min or config.CAMERA_PARAMS.quality.min }}" 
+                                       max="{{ config.CAMERA_PARAMS.quality.device_max or config.CAMERA_PARAMS.quality.max }}" 
+                                       value="{{ config.CAMERA_PARAMS.quality.default }}" 
+                                       step="{{ config.CAMERA_PARAMS.quality.step }}"
+                                       oninput="updateCamera('quality', this.value)">
+                                <span id="quality-display">{{ config.CAMERA_PARAMS.quality.default }}</span>
+                            </div>
+                            
+                            <div class="slider-group">
+                                <label for="denoise-slider">{{ config.CAMERA_PARAMS.denoise.name }} ({{ config.CAMERA_PARAMS.denoise.min }} ~ {{ config.CAMERA_PARAMS.denoise.max }}):</label>
+                                <input type="range" id="denoise-slider" 
+                                       min="{{ config.CAMERA_PARAMS.denoise.device_min or config.CAMERA_PARAMS.denoise.min }}" 
+                                       max="{{ config.CAMERA_PARAMS.denoise.device_max or config.CAMERA_PARAMS.denoise.max }}" 
+                                       value="{{ config.CAMERA_PARAMS.denoise.default }}" 
+                                       step="{{ config.CAMERA_PARAMS.denoise.step }}"
+                                       oninput="updateCamera('denoise', this.value)">
+                                <span id="denoise-display">{{ config.CAMERA_PARAMS.denoise.default }}</span>
+                            </div>
+                        </div>
+                        
+                        <button class="btn-secondary" onclick="resetCamera()">
+                            {{ config.UI_TEXT.camera_reset }}
+                        </button>
+                        <button class="btn-secondary" onclick="applyNightMode()">
+                            🌙 야간 모드
+                        </button>
+                        <button class="btn-secondary" onclick="applyDayMode()">
+                            ☀️ 주간 모드
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 빠른 액션 버튼 -->
+        <div style="text-align: center; margin-top: 30px; padding: 20px;">
+            <a href="/autonomous" style="display: inline-block; padding: 20px 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; border-radius: 15px; font-size: 1.3rem; font-weight: bold; box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3); transition: all 0.3s;" onmouseover="this.style.transform='translateY(-5px)'; this.style.boxShadow='0 15px 40px rgba(102, 126, 234, 0.5)';" onmouseout="this.style.transform=''; this.style.boxShadow='0 10px 30px rgba(102, 126, 234, 0.3)';">
+                🚗 자율주행 모드로 전환
+            </a>
+            <a href="/ai-demo" style="display: inline-block; padding: 20px 40px; margin-left: 20px; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; text-decoration: none; border-radius: 15px; font-size: 1.3rem; font-weight: bold; box-shadow: 0 10px 30px rgba(56, 239, 125, 0.3); transition: all 0.3s;" onmouseover="this.style.transform='translateY(-5px)'; this.style.boxShadow='0 15px 40px rgba(56, 239, 125, 0.5)';" onmouseout="this.style.transform=''; this.style.boxShadow='0 10px 30px rgba(56, 239, 125, 0.3)';">
+                🤖 AI 데모 보기
+            </a>
+        </div>
+        
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
+
+
+

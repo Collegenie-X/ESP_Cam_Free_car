@@ -36,9 +36,21 @@ camera_config_t getCameraConfig() {
     config.ledc_channel = LEDC_CHANNEL_0;     // LEDC 채널
     
     config.pixel_format = PIXFORMAT_JPEG;     // JPEG 포맷
-    config.frame_size = FRAMESIZE_VGA;        // VGA 해상도 (640x480)
-    config.jpeg_quality = 12;                 // JPEG 품질 (0-63, 낮을수록 고품질)
-    config.fb_count = 1;                      // 프레임 버퍼 개수
+    
+    // PSRAM 사용 가능 여부에 따라 최적 설정 적용 (wifi_html_free_car.ino 방식)
+    if (psramFound()) {
+        // PSRAM 있음: 고화질 모드
+        config.frame_size = FRAMESIZE_QVGA;    // 640x480 (고해상도)
+        config.jpeg_quality = 10;              // 더 낮은 압축 = 더 고품질 (밝기 향상)
+        config.fb_count = 2;                  // 이중 버퍼
+        Serial.println("PSRAM 감지: 고화질 모드 (VGA, Q=8)");
+    } else {
+        // PSRAM 없음: 중간 화질 모드
+        config.frame_size = FRAMESIZE_HVGA;   // 480x320 (중간 해상도)
+        config.jpeg_quality = 10;             // 품질 향상
+        config.fb_count = 1;                  // 단일 버퍼
+        Serial.println("PSRAM 미감지: 중간 화질 모드 (HVGA, Q=10)");
+    }
     
     return config;
 }
@@ -67,23 +79,26 @@ bool initCamera() {
         return false;
     }
     
-    // 센서 설정 최적화
-    sensor->set_brightness(sensor, 0);        // 밝기: -2 ~ 2
-    sensor->set_contrast(sensor, 0);          // 대비: -2 ~ 2
-    sensor->set_saturation(sensor, 0);        // 채도: -2 ~ 2
+    // 센서 설정 최적화 (밝기 최대 향상)
+    sensor->set_brightness(sensor, 2);        // 밝기: -2 ~ 2 (최대)
+    sensor->set_contrast(sensor, 2);          // 대비: -2 ~ 2 (최대)
+    sensor->set_saturation(sensor, 1);        // 채도: -2 ~ 2 (약간 증가, 2는 과포화 가능)
     sensor->set_special_effect(sensor, 0);    // 특수 효과: 0 (없음)
     sensor->set_whitebal(sensor, 1);          // 화이트 밸런스: 1 (자동)
     sensor->set_awb_gain(sensor, 1);          // AWB 게인: 1 (활성화)
     sensor->set_wb_mode(sensor, 0);           // WB 모드: 0 (자동)
     sensor->set_exposure_ctrl(sensor, 1);     // 노출 제어: 1 (자동)
-    sensor->set_aec2(sensor, 0);              // AEC2: 0 (비활성화)
+    sensor->set_aec2(sensor, 1);              // AEC2: 1 (활성화로 노출 향상)
+    sensor->set_ae_level(sensor, 2);          // AE 레벨: -2 ~ 2 (노출 보정, 2=최대 밝게)
+    sensor->set_aec_value(sensor, 2000);      // AEC 값: 수동 노출 시간 (높을수록 밝음, 기본 300)
     sensor->set_gain_ctrl(sensor, 1);         // 게인 제어: 1 (자동)
-    sensor->set_agc_gain(sensor, 0);          // AGC 게인: 0
-    sensor->set_gainceiling(sensor, (gainceiling_t)0);  // 게인 상한
+    sensor->set_agc_gain(sensor, 30);         // AGC 게인: 0~30 (20으로 대폭 증가)
+    sensor->set_gainceiling(sensor, (gainceiling_t)6);  // 게인 상한 (0~6, 6=최대)
     sensor->set_bpc(sensor, 0);               // BPC: 0 (비활성화)
     sensor->set_wpc(sensor, 1);               // WPC: 1 (활성화)
-    sensor->set_raw_gma(sensor, 1);           // RAW GMA: 1 (활성화)
+    sensor->set_raw_gma(sensor, 1);           // RAW GMA: 1 (활성화, 감마 보정으로 어두운 부분 밝게)
     sensor->set_lenc(sensor, 1);              // 렌즈 보정: 1 (활성화)
+    // 미러/플립은 필요 시 변경 가능. 스트리밍 방향이 거꾸로면 두 값을 1로 설정하세요.
     sensor->set_hmirror(sensor, 0);           // 수평 미러: 0 (비활성화)
     sensor->set_vflip(sensor, 0);             // 수직 플립: 0 (비활성화)
     sensor->set_dcw(sensor, 1);               // DCW: 1 (활성화)

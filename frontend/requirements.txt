@@ -1,0 +1,31 @@
+# Flask 웹 프레임워크
+Flask==3.0.0
+Werkzeug==3.0.1
+requests==2.31.0
+blinker==1.9.0  # Flask 시그널
+itsdangerous==2.2.0  # Flask 세션
+Jinja2==3.1.6  # Flask 템플릿
+MarkupSafe==3.0.3  # Jinja2 의존성
+
+# AI 및 이미지 처리
+opencv-python==4.8.1.78  # OpenCV 이미지 처리
+numpy>=1.26,<2.0  # 배열 연산
+ultralytics==8.0.196  # YOLOv8 객체 감지
+torch>=2.0.0  # PyTorch (YOLO 의존성)
+torchvision>=0.15.0  # PyTorch Vision
+Pillow>=10.0.0  # 이미지 처리
+
+# 유틸리티
+python-dotenv==1.0.0  # 환경변수 관리
+typing-extensions>=4.8.0  # 타입 힌트
+certifi>=2025.10.5  # HTTPS 인증서
+charset-normalizer>=3.4.0  # 인코딩 처리
+idna>=3.11  # URL 인코딩
+urllib3>=2.5.0  # HTTP 클라이언트
+
+# 개발 도구 (선택적)
+black==23.10.1  # 코드 포맷터
+isort==5.12.0  # import 정렬
+flake8==6.1.0  # 린터
+mypy==1.6.1  # 타입 체커
+pytest==7.4.3  # 테스트 프레임워크

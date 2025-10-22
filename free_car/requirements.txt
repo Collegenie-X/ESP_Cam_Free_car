@@ -1,0 +1,10 @@
+# OpenCV 및 이미지 처리
+opencv-python==4.8.1.78
+numpy>=1.26,<2.0
+
+# HTTP 통신
+requests==2.31.0
+
+# 설정 관리
+python-dotenv==1.0.0
+

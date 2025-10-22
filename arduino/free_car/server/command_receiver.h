@@ -5,6 +5,8 @@
 #include "../motor/motor_controller.h"
 #include "../motor/motor_command.h"
 #include "../led/led_controller.h"
+#include "../camera/camera_control.h"
+#include <Arduino.h>
 
 /**
  * 제어 명령 수신 핸들러 함수
@@ -119,22 +121,192 @@ esp_err_t ledControlHandler(httpd_req_t *req) {
  * @return 핸들러 처리 결과
  */
 esp_err_t statusHandler(httpd_req_t *req) {
+    // 카메라 센서 정보 가져오기
+    sensor_t* sensor = esp_camera_sensor_get();
+    
     // JSON 형식으로 상태 정보 생성
     String json = "{\n";
     json += "  \"wifi_connected\": true,\n";
     json += "  \"ip_address\": \"" + WiFi.localIP().toString() + "\",\n";
     json += "  \"camera_status\": \"ok\",\n";
-    json += "  \"motor_status\": \"ok\",\n";
+    json += "  \"motor_status\": \"";
+    json += isMotorRunning() ? "running" : "stopped";
+    json += "\",\n";
     json += "  \"current_command\": \"" + commandToString(getCurrentCommand()) + "\",\n";
-    json += "  \"led_state\": ";
-    json += getLEDState() ? "\"on\"" : "\"off\"";
-    json += "\n}";
+    json += "  \"led_state\": \"";
+    json += getLEDState() ? "on" : "off";
+    json += "\",\n";
+    json += "  \"speed\": ";
+    json += String(getMotorSpeed());
+    json += ",\n";
+    
+    // 카메라 센서 설정 추가
+    json += "  \"camera_settings\": {\n";
+    if (sensor) {
+        json += "    \"brightness\": " + String(sensor->status.brightness) + ",\n";
+        json += "    \"contrast\": " + String(sensor->status.contrast) + ",\n";
+        json += "    \"saturation\": " + String(sensor->status.saturation) + ",\n";
+        json += "    \"agc_gain\": " + String(sensor->status.agc_gain) + ",\n";
+        json += "    \"gainceiling\": " + String(sensor->status.gainceiling) + ",\n";
+        json += "    \"aec2\": " + String(sensor->status.aec2) + ",\n";
+        json += "    \"hmirror\": " + String(sensor->status.hmirror) + ",\n";
+        json += "    \"vflip\": " + String(sensor->status.vflip) + "\n";
+    } else {
+        json += "    \"error\": \"sensor not available\"\n";
+    }
+    json += "  }\n";
+    json += "}";
     
     // 응답 전송
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     httpd_resp_send(req, json.c_str(), HTTPD_RESP_USE_STRLEN);
     
+    return ESP_OK;
+}
+
+/**
+ * 속도 제어 핸들러 함수
+ * URL: /speed?op=[plus|minus]&step=10
+ */
+esp_err_t speedControlHandler(httpd_req_t *req) {
+    char buf[100];
+    size_t buf_len = httpd_req_get_url_query_len(req) + 1;
+    if (buf_len > 1 && httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK) {
+        char op_param[16];
+        char step_param[16];
+        String op = "";
+        int step = 10;
+        if (httpd_query_key_value(buf, "op", op_param, sizeof(op_param)) == ESP_OK) {
+            op = String(op_param);
+            op.toLowerCase();
+            op.trim();
+        }
+        if (httpd_query_key_value(buf, "step", step_param, sizeof(step_param)) == ESP_OK) {
+            step = atoi(step_param);
+            if (step < 1) step = 1;
+            if (step > 100) step = 100; // 과도한 증감 방지
+        }
+
+        int after = getMotorSpeed();
+        if (op == "plus") {
+            after = increaseMotorSpeed(step);
+        } else if (op == "minus") {
+            after = decreaseMotorSpeed(step);
+        } else {
+            httpd_resp_set_status(req, "400 Bad Request");
+            httpd_resp_send(req, "Unknown op. Use plus or minus", HTTPD_RESP_USE_STRLEN);
+            return ESP_OK;
+        }
+
+        String resp = String("speed=") + String(after);
+        httpd_resp_set_type(req, "text/plain");
+        httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+        httpd_resp_send(req, resp.c_str(), HTTPD_RESP_USE_STRLEN);
+        return ESP_OK;
+    }
+
+    httpd_resp_set_status(req, "400 Bad Request");
+    httpd_resp_send(req, "Missing op parameter", HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+}
+
+/**
+ * 카메라 센서 제어 핸들러 함수
+ * URL: /camera?param=[brightness|contrast|saturation|agc_gain|gainceiling|aec2|hmirror|vflip]&value=N
+ * 또는 /camera?get=settings (현재 설정값 조회)
+ */
+esp_err_t cameraControlHandler(httpd_req_t *req) {
+    char buf[150];
+    size_t buf_len = httpd_req_get_url_query_len(req) + 1;
+    
+    if (buf_len > 1 && httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK) {
+        // 설정값 조회 요청
+        char get_param[16];
+        if (httpd_query_key_value(buf, "get", get_param, sizeof(get_param)) == ESP_OK) {
+            String getStr = String(get_param);
+            getStr.toLowerCase();
+            if (getStr == "settings") {
+                String settings = getCameraSettings();
+                httpd_resp_set_type(req, "application/json");
+                httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+                httpd_resp_send(req, settings.c_str(), HTTPD_RESP_USE_STRLEN);
+                return ESP_OK;
+            }
+        }
+        
+        // 설정값 변경 요청
+        char param_name[32];
+        char value_str[16];
+        
+        if (httpd_query_key_value(buf, "param", param_name, sizeof(param_name)) != ESP_OK) {
+            httpd_resp_set_status(req, "400 Bad Request");
+            httpd_resp_send(req, "Missing param parameter", HTTPD_RESP_USE_STRLEN);
+            return ESP_OK;
+        }
+        
+        if (httpd_query_key_value(buf, "value", value_str, sizeof(value_str)) != ESP_OK) {
+            httpd_resp_set_status(req, "400 Bad Request");
+            httpd_resp_send(req, "Missing value parameter", HTTPD_RESP_USE_STRLEN);
+            return ESP_OK;
+        }
+        
+        String param = String(param_name);
+        param.toLowerCase();
+        param.trim();
+        
+        int value = atoi(value_str);
+        bool success = false;
+        String response = "";
+        
+        // 파라미터별 처리
+        if (param == "brightness") {
+            success = setCameraBrightness(value);
+            response = "brightness=" + String(value);
+        } else if (param == "contrast") {
+            success = setCameraContrast(value);
+            response = "contrast=" + String(value);
+        } else if (param == "saturation") {
+            success = setCameraSaturation(value);
+            response = "saturation=" + String(value);
+        } else if (param == "agc_gain") {
+            success = setCameraAgcGain(value);
+            response = "agc_gain=" + String(value);
+        } else if (param == "gainceiling") {
+            success = setCameraGainCeiling(value);
+            response = "gainceiling=" + String(value);
+        } else if (param == "aec2") {
+            success = setCameraAec2(value);
+            response = "aec2=" + String(value);
+        } else if (param == "hmirror") {
+            success = setCameraHmirror(value);
+            response = "hmirror=" + String(value);
+        } else if (param == "vflip") {
+            success = setCameraVflip(value);
+            response = "vflip=" + String(value);
+        } else {
+            httpd_resp_set_status(req, "400 Bad Request");
+            httpd_resp_send(req, "Unknown param. Use: brightness, contrast, saturation, agc_gain, gainceiling, aec2, hmirror, vflip", HTTPD_RESP_USE_STRLEN);
+            return ESP_OK;
+        }
+        
+        if (success) {
+            httpd_resp_set_type(req, "text/plain");
+            httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+            httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+        } else {
+            httpd_resp_set_status(req, "500 Internal Server Error");
+            httpd_resp_send(req, "Failed to set camera parameter", HTTPD_RESP_USE_STRLEN);
+        }
+        
+        return ESP_OK;
+    }
+    
+    // 파라미터가 없는 경우 - 현재 설정 반환
+    String settings = getCameraSettings();
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    httpd_resp_send(req, settings.c_str(), HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
 
