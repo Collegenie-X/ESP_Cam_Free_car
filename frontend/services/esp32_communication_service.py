@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class ESP32CommunicationService:
     """Service class for ESP32-CAM communication"""
 
-    def __init__(self, base_url: str, timeout: int = 2):
+    def __init__(self, base_url: str, timeout: int = 10):
         """
         Initialize ESP32 communication service
 
@@ -125,12 +125,23 @@ class ESP32CommunicationService:
 
     def get_capture_url(self) -> str:
         """
-        Get capture URL
+        Get capture URL (base URL without timestamp)
 
         Returns:
             Capture URL string
         """
         return f"{self.base_url}/capture"
+
+    def get_fresh_capture_url(self) -> str:
+        """
+        Get capture URL with timestamp to prevent caching
+
+        Returns:
+            Capture URL with timestamp parameter
+        """
+        import time
+
+        return f"{self.base_url}/capture?t={int(time.time() * 1000)}"
 
     def verify_connection(self) -> bool:
         """

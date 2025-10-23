@@ -53,6 +53,7 @@ class AutonomousDrivingService:
             "commands_sent": 0,
             "errors": 0,
             "start_time": None,
+            "last_frame_time": 0,  # Last frame processing time in ms
         }
         self._polling_thread = None
         self._stop_polling = False
@@ -95,31 +96,33 @@ class AutonomousDrivingService:
         if not self.is_running:
             return {"success": False, "message": "Autonomous driving not running"}
 
-        # Stop polling thread
+        # Stop polling thread first
         self._stop_polling = True
         if self._polling_thread and self._polling_thread.is_alive():
             self._polling_thread.join(timeout=2.0)
 
-        # Gradually slow down instead of immediate stop
+        # Send stop command immediately
         try:
-            # Send center command first to straighten the car
-            self.esp32_service.send_command("control", {"cmd": "center"})
-            time.sleep(0.2)  # Wait briefly
+            logger.info("🛑 Sending STOP command to ESP32")
 
-            # Then send stop command
+            # Send stop command directly
             stop_response = self.esp32_service.send_command("control", {"cmd": "stop"})
-            if not stop_response.get("success"):
-                logger.error(f"Failed to send stop command: {stop_response}")
+            if stop_response.get("success"):
+                logger.info("✓ STOP command sent successfully")
+                self.last_command = "STOP"
+            else:
+                logger.error(f"✗ Failed to send stop command: {stop_response}")
 
             # Verify the stop command
+            time.sleep(0.1)  # Brief wait for command to take effect
             verify_response = self.esp32_service.send_command("status")
             if verify_response.get("success"):
-                logger.info("Verified stop command")
+                logger.info("✓ Stop command verified")
             else:
-                logger.warning("Could not verify stop command")
+                logger.warning("⚠ Could not verify stop command")
 
         except Exception as e:
-            logger.error(f"Error during stop sequence: {e}")
+            logger.error(f"✗ Error during stop sequence: {e}")
 
         self.is_running = False
         elapsed = (
@@ -141,32 +144,47 @@ class AutonomousDrivingService:
     def _polling_loop(self):
         """
         Background loop for /capture polling and lane tracking
+        Real-time processing: Skip old frames, process only latest
         """
-        logger.info("Starting polling loop")
-        capture_url = self.esp32_service.get_capture_url()
-        TARGET_FPS = 5  # Fixed at 5fps
-        FRAME_INTERVAL = 1.0 / TARGET_FPS  # 0.2 seconds
+        logger.info("Starting ULTRA-FAST real-time polling loop")
+        base_capture_url = self.esp32_service.get_capture_url()
+        TARGET_FPS = 15  # Increased to 15fps for faster response
+        FRAME_INTERVAL = 1.0 / TARGET_FPS  # 0.067 seconds
+        MIN_COMMAND_INTERVAL = 0.15  # Minimum 150ms between commands
 
         # Send initial forward command
         self._send_command_to_esp32(self.DEFAULT_COMMAND)
 
-        frame_counter = 0  # Track frames for debug image generation
+        frame_counter = 0
+        last_command_time = 0
 
         while not self._stop_polling and self.is_running:
             try:
-                start_time = time.time()
+                loop_start = time.time()
 
-                # Get image from ESP32-CAM
-                response = requests.get(capture_url, timeout=2)
+                # CRITICAL: Add timestamp to prevent caching!
+                capture_url = f"{base_capture_url}?t={int(time.time() * 1000)}"
+
+                # TIMING: Image capture
+                capture_start = time.time()
+                response = requests.get(
+                    capture_url,
+                    timeout=1.5,
+                    headers={"Cache-Control": "no-cache", "Pragma": "no-cache"},
+                )
+                capture_time = (time.time() - capture_start) * 1000
+
                 if response.status_code != 200:
                     logger.warning(f"Failed to capture image: {response.status_code}")
                     self.stats["errors"] += 1
                     time.sleep(FRAME_INTERVAL)
                     continue
 
-                # Decode image
+                # TIMING: Image decode
+                decode_start = time.time()
                 nparr = np.frombuffer(response.content, np.uint8)
                 image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                decode_time = (time.time() - decode_start) * 1000
 
                 if image is None or image.size == 0:
                     logger.warning("Failed to decode image")
@@ -175,46 +193,76 @@ class AutonomousDrivingService:
                     continue
 
                 frame_counter += 1
-                current_time = time.time()
+                self.stats["frames_processed"] = frame_counter
 
-                # Generate debug image only once per second
-                # This reduces processing load significantly
-                should_generate_debug = (
-                    current_time - self.last_image_update_time >= 1.0
-                )
-
-                # Process lane tracking
-                # Use debug=True only when we need to update the display image (1fps)
-                # Otherwise use debug=False for faster processing (4fps)
-                result = self.process_frame(
-                    image, send_command=True, debug=should_generate_debug
-                )
+                # TIMING: Lane analysis
+                analysis_start = time.time()
+                result = self.process_frame(image, send_command=False, debug=False)
+                analysis_time = (time.time() - analysis_start) * 1000
 
                 if result.get("success"):
-                    logger.debug(
-                        f"Frame {frame_counter}: command={result['command']}, "
-                        f"confidence={result['confidence']:.2f}, "
-                        f"debug={'ON' if should_generate_debug else 'OFF'}"
-                    )
+                    # Send command IMMEDIATELY if interval passed
+                    current_time = time.time()
+                    time_since_last_command = current_time - last_command_time
 
-                    # Store debug image when generated
-                    if should_generate_debug and "debug_images" in result:
-                        processed_image = result["debug_images"].get("7_final", image)
-                        # Encode and store
-                        _, buffer = cv2.imencode(
-                            ".jpg", processed_image, [cv2.IMWRITE_JPEG_QUALITY, 85]
+                    if time_since_last_command >= MIN_COMMAND_INTERVAL:
+                        # TIMING: Command send
+                        command_start = time.time()
+                        sent = self._send_command_to_esp32(result["command"])
+                        command_time = (time.time() - command_start) * 1000
+
+                        if sent:
+                            last_command_time = current_time
+                            self.stats["commands_sent"] += 1
+
+                        # Always update frame time (even if command not sent)
+                        total_time = (current_time - loop_start) * 1000
+                        self.stats["last_frame_time"] = int(total_time)
+
+                        logger.info(
+                            f"[{frame_counter}] {result['command']} "
+                            f"L:{result['histogram']['left']} "
+                            f"C:{result['histogram']['center']} "
+                            f"R:{result['histogram']['right']} "
+                            f"| Cap:{capture_time:.0f}ms Dec:{decode_time:.0f}ms "
+                            f"Ana:{analysis_time:.0f}ms Cmd:{command_time:.0f}ms "
+                            f"TOT={total_time:.0f}ms"
                         )
-                        self.latest_processed_image = buffer.tobytes()
-                        self.last_image_update_time = current_time
-                        logger.info(f"Updated display image at frame {frame_counter}")
-                else:
-                    logger.warning(f"Frame processing failed: {result.get('error')}")
+                    else:
+                        # Even if command not sent, update frame time
+                        total_time = (time.time() - loop_start) * 1000
+                        self.stats["last_frame_time"] = int(total_time)
 
-                # Limit frame rate
-                elapsed = time.time() - start_time
-                sleep_time = max(0, FRAME_INTERVAL - elapsed)
-                if sleep_time > 0:
-                    time.sleep(sleep_time)
+                    # Debug image every 1 second (non-blocking)
+                    if current_time - self.last_image_update_time >= 1.0:
+                        try:
+                            debug_result = self.lane_tracker.process_frame(
+                                image, debug=True
+                            )
+                            if debug_result.get("debug_images"):
+                                processed_image = debug_result["debug_images"].get(
+                                    "7_final", image
+                                )
+                                _, buffer = cv2.imencode(
+                                    ".jpg",
+                                    processed_image,
+                                    [cv2.IMWRITE_JPEG_QUALITY, 75],
+                                )
+                                self.latest_processed_image = buffer.tobytes()
+                                self.last_image_update_time = current_time
+                        except Exception as e:
+                            logger.debug(f"Debug image failed: {e}")
+                else:
+                    logger.warning(f"Processing failed: {result.get('error')}")
+
+                # Minimal sleep - prioritize speed
+                elapsed = time.time() - loop_start
+                if elapsed < FRAME_INTERVAL:
+                    time.sleep(FRAME_INTERVAL - elapsed)
+                else:
+                    # No sleep if already slow - process next immediately
+                    if elapsed > 0.15:
+                        logger.warning(f"⚠ Slow: {elapsed*1000:.0f}ms")
 
             except Exception as e:
                 logger.error(f"Polling loop error: {e}")
@@ -393,6 +441,7 @@ class AutonomousDrivingService:
             "errors": self.stats["errors"],
             "elapsed_time": f"{elapsed:.1f}s",
             "fps": f"{fps:.1f}",
+            "last_frame_time": self.stats["last_frame_time"],
         }
 
     def analyze_single_frame(

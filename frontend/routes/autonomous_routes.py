@@ -37,23 +37,51 @@ def start_autonomous():
                 500,
             )
 
-        # Verify ESP32 connection before starting
+        # Get ESP32 service
         esp32_service = current_app.config.get("ESP32_SERVICE")
-        if not esp32_service.verify_connection():
+        if not esp32_service:
             return (
                 jsonify(
                     {
                         "success": False,
-                        "error": "Cannot connect to ESP32-CAM",
+                        "error": "ESP32 service not initialized",
+                    }
+                ),
+                500,
+            )
+
+        # Verify ESP32 connection before starting (with extended timeout)
+        try:
+            response = requests.get(f"{esp32_service.base_url}/status", timeout=5)
+            if response.status_code != 200:
+                return (
+                    jsonify(
+                        {
+                            "success": False,
+                            "error": f"ESP32-CAM not responding (HTTP {response.status_code})",
+                        }
+                    ),
+                    400,
+                )
+        except requests.exceptions.RequestException as e:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": f"Cannot connect to ESP32-CAM: {str(e)}",
                     }
                 ),
                 400,
             )
 
-        # Get initial frame for analysis
+        # Start autonomous driving immediately without waiting for initial frame
+        # This prevents timeout issues
+        result = auto_service.start()
+
+        # Try to get initial frame asynchronously (non-blocking)
         try:
             capture_url = esp32_service.get_capture_url()
-            response = requests.get(capture_url, timeout=5)
+            response = requests.get(capture_url, timeout=3)
 
             if response.status_code == 200:
                 # Decode image
@@ -72,9 +100,6 @@ def start_autonomous():
                             frame_result["image"]
                         ).decode("utf-8")
 
-                        # Start autonomous driving
-                        result = auto_service.start()
-
                         # Add initial frame data
                         result["initial_frame"] = {
                             "processed_image": processed_image,
@@ -83,17 +108,11 @@ def start_autonomous():
                             "histogram": frame_result["histogram"],
                             "confidence": frame_result["confidence"],
                         }
-
-                        return jsonify(result)
-
-            # If image capture/analysis fails, start without initial frame
-            logger.warning("Could not get initial frame, starting without analysis")
+                        logger.info("Initial frame analysis successful")
 
         except Exception as e:
-            logger.error(f"Error getting initial frame: {e}")
+            logger.warning(f"Could not get initial frame (non-critical): {e}")
 
-        # Start without initial frame if anything fails
-        result = auto_service.start()
         return jsonify(result)
 
     except Exception as e:
@@ -135,17 +154,15 @@ def stop_autonomous():
                 500,
             )
 
-        # First, try emergency stop
-        logger.info("Executing emergency stop sequence")
-        esp32_service.emergency_stop()
-
-        # Then, stop autonomous service
+        # Stop autonomous service (this will send stop command)
         result = auto_service.stop()
 
-        # Verify motors are stopped
-        if not esp32_service.verify_motor_stopped():
-            logger.warning("Could not verify motor stop status")
-            result["warning"] = "Motor stop status could not be verified"
+        # Double-check with emergency stop to ensure motors are stopped
+        logger.info("Executing emergency stop verification")
+        try:
+            esp32_service.send_command("control", {"cmd": "stop"})
+        except Exception as e:
+            logger.warning(f"Emergency stop verification failed: {e}")
 
         return jsonify(result)
 
@@ -231,7 +248,7 @@ def analyze_frame():
 
             if image_url:
                 # Get image from ESP32-CAM
-                response = requests.get(image_url, timeout=5)
+                response = requests.get(image_url, timeout=10)
                 if response.status_code == 200:
                     nparr = np.frombuffer(response.content, np.uint8)
                     image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -247,10 +264,14 @@ def analyze_frame():
             esp32_service = current_app.config.get("ESP32_SERVICE")
             if esp32_service:
                 capture_url = esp32_service.get_capture_url()
-                response = requests.get(capture_url, timeout=5)
+                logger.info(f"Capturing image from: {capture_url}")
+                response = requests.get(capture_url, timeout=10)
                 if response.status_code == 200:
                     nparr = np.frombuffer(response.content, np.uint8)
                     image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                    logger.info("Image captured successfully")
+                else:
+                    logger.error(f"Image capture failed: HTTP {response.status_code}")
 
         if image is None:
             return (

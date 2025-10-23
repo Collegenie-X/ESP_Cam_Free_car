@@ -62,46 +62,46 @@ class Visualization:
     ) -> np.ndarray:
         """상단 정보 패널 그리기"""
         height, width = image.shape[:2]
-        panel_height = 100
+        panel_height = 70  # 패널 높이 감소
 
         # 반투명 배경
         overlay = image.copy()
         cv2.rectangle(overlay, (0, 0), (width, panel_height), (0, 0, 0), -1)
         cv2.addWeighted(overlay, 0.5, image, 0.5, 0, image)
 
-        # 명령 표시 (큰 글씨)
+        # 명령 표시 (폰트 크기 감소)
         command_color = {
-            "LEFT": (0, 165, 255),  # 주황
-            "RIGHT": (255, 0, 255),  # 마젠타
-            "CENTER": (0, 255, 0),  # 초록
-            "STOP": (0, 0, 255),  # 빨강
+            "LEFT": (0, 165, 255),  # Orange
+            "RIGHT": (255, 0, 255),  # Magenta
+            "CENTER": (0, 255, 0),  # Green
+            "STOP": (0, 0, 255),  # Red
         }.get(command, (255, 255, 255))
 
         cv2.putText(
             image,
             f">>> {command} <<<",
-            (10, 40),
+            (10, 30),  # y 위치 조정
             cv2.FONT_HERSHEY_DUPLEX,
-            1.3,
+            0.9,  # 폰트 크기 감소: 1.3 -> 0.9
             command_color,
-            3,
+            2,  # 두께 감소: 3 -> 2
         )
 
-        # 상태 표시
+        # 상태 표시 (영문으로 변경)
         state_text = {
-            "NORMAL_DRIVING": "일반 주행",
-            "CORNER_DETECTED": "코너 감지",
-            "TURNING": "회전 중",
+            "NORMAL_DRIVING": "Normal",
+            "CORNER_DETECTED": "Corner",
+            "TURNING": "Turning",
         }.get(state, state)
 
         cv2.putText(
             image,
-            f"상태: {state_text}",
-            (10, 75),
+            f"State: {state_text}",
+            (10, 55),  # y 위치 조정
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
+            0.5,  # 폰트 크기 감소: 0.7 -> 0.5
             (255, 255, 255),
-            2,
+            1,  # 두께 감소: 2 -> 1
         )
 
         return image

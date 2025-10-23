@@ -15,10 +15,13 @@ logger = logging.getLogger(__name__)
 class ImagePreprocessor:
     """이미지 전처리 클래스"""
 
-    @staticmethod
-    def apply_clahe(image: np.ndarray) -> np.ndarray:
+    def __init__(self):
+        """전처리기 초기화 - CLAHE 객체를 미리 생성하여 재사용"""
+        self.clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+
+    def apply_clahe(self, image: np.ndarray) -> np.ndarray:
         """
-        CLAHE (대비 제한 적응 히스토그램 평활화) 적용
+        CLAHE (대비 제한 적응 히스토그램 평활화) 적용 - 최적화 버전
 
         Args:
             image: 원본 BGR 이미지
@@ -26,30 +29,23 @@ class ImagePreprocessor:
         Returns:
             선명도가 개선된 이미지
         """
-        # BGR을 LAB 색공간으로 변환 (L: 밝기, A: 녹색-빨강, B: 파랑-노랑)
-        lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
-        l, a, b = cv2.split(lab)
-
-        # L 채널에만 CLAHE 적용
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        l_clahe = clahe.apply(l)
-
-        # 다시 합치고 BGR로 변환
-        lab_clahe = cv2.merge([l_clahe, a, b])
-        enhanced = cv2.cvtColor(lab_clahe, cv2.COLOR_LAB2BGR)
-
+        # 그레이스케일로 변환하여 처리 속도 향상 (컬러 변환 생략)
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        enhanced_gray = self.clahe.apply(gray)
+        # 그레이스케일을 BGR로 변환
+        enhanced = cv2.cvtColor(enhanced_gray, cv2.COLOR_GRAY2BGR)
         return enhanced
 
     @staticmethod
     def apply_gaussian_blur(
-        image: np.ndarray, kernel_size: tuple = (5, 5)
+        image: np.ndarray, kernel_size: tuple = (3, 3)
     ) -> np.ndarray:
         """
-        가우시안 블러 적용 (노이즈 제거)
+        가우시안 블러 적용 (노이즈 제거) - 최적화: 커널 크기 축소
 
         Args:
             image: 원본 이미지
-            kernel_size: 커널 크기 (기본: 5x5)
+            kernel_size: 커널 크기 (기본: 3x3, 속도 향상)
 
         Returns:
             블러 처리된 이미지

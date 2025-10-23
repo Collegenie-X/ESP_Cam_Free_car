@@ -24,12 +24,13 @@ class NoiseFilter:
         """
         self.min_area = min_area
         self.min_aspect_ratio = min_aspect_ratio
+        # 커널을 미리 생성하여 재사용 (성능 향상)
+        self.kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
 
     def remove_noise(self, mask: np.ndarray) -> np.ndarray:
         """
-        노이즈 제거 (3단계 필터링)
-        1차: 형태학적 Opening
-        2차: 컨투어 면적 + 종횡비 필터링
+        노이즈 제거 (최적화 버전 - 단순 Opening만 사용)
+        컨투어 필터링 생략으로 속도 향상
 
         Args:
             mask: 원본 마스크
@@ -37,14 +38,9 @@ class NoiseFilter:
         Returns:
             노이즈가 제거된 마스크
         """
-        # 1차: Opening (작은 점 노이즈 제거)
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-        opened = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-
-        # 2차: 컨투어 필터링
-        clean_mask = self._filter_by_contours(opened)
-
-        return clean_mask
+        # Opening만 사용 (속도 우선)
+        opened = cv2.morphologyEx(mask, cv2.MORPH_OPEN, self.kernel)
+        return opened
 
     def _filter_by_contours(self, mask: np.ndarray) -> np.ndarray:
         """

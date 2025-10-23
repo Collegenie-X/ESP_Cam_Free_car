@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>자율주행 모니터링 - ESP32-CAM 자율주행차</title>
+    <title>Autonomous Driving Monitor - ESP32-CAM Car</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <style>
         body {
@@ -25,12 +25,12 @@
         }
 
         .header h1 {
-            font-size: 2.5rem;
+            font-size: 1.8rem;
             margin-bottom: 10px;
         }
 
         .header p {
-            font-size: 1.2rem;
+            font-size: 1rem;
             opacity: 0.9;
         }
 
@@ -49,7 +49,7 @@
         }
 
         .card-title {
-            font-size: 1.5rem;
+            font-size: 1.2rem;
             font-weight: bold;
             margin-bottom: 15px;
             color: #333;
@@ -118,8 +118,8 @@
         }
 
         .btn {
-            padding: 15px 25px;
-            font-size: 1.1rem;
+            padding: 12px 20px;
+            font-size: 0.95rem;
             font-weight: bold;
             border: none;
             border-radius: 10px;
@@ -264,7 +264,7 @@
         }
 
         .status-value {
-            font-size: 1.5rem;
+            font-size: 1.2rem;
             font-weight: bold;
             color: #333;
         }
@@ -375,7 +375,7 @@
         }
 
         .stat-value {
-            font-size: 1.3rem;
+            font-size: 1.1rem;
             font-weight: bold;
             color: #667eea;
         }
@@ -404,24 +404,24 @@
 </head>
 <body>
     <div class="container">
-        <!-- 헤더 -->
+        <!-- Header -->
         <div class="header">
-            <h1>🚗 자율주행 모니터링</h1>
-            <p>ESP32-CAM 기반 차선 추적 시스템 (prod.md 구현)</p>
+            <h1>🚗 Autonomous Driving Monitor</h1>
+            <p>ESP32-CAM Lane Tracking System</p>
         </div>
 
         <!-- 대시보드 -->
         <div class="dashboard">
-            <!-- 왼쪽: 비디오 스트림 -->
+            <!-- Left: Video Stream -->
             <div class="card">
-                <div class="card-title">📹 실시간 스트림</div>
+                <div class="card-title">📹 Live Stream</div>
             <div class="stream-container">
-                <img id="videoStream" src="" alt="비디오 스트림">
+                <img id="videoStream" src="" alt="Video Stream">
                 <div class="stream-overlay" id="streamOverlay">
                     <div>
-                        <p id="streamStatus">카메라 연결 중...</p>
+                        <p id="streamStatus">Connecting to camera...</p>
                         <button class="btn btn-secondary" onclick="retryStream()" style="margin-top: 15px; display: none;" id="retryButton">
-                            🔄 재시도
+                            🔄 Retry
                         </button>
                     </div>
                 </div>
@@ -442,118 +442,122 @@
                 </div>
             </div>
                 
-                <!-- 히스토그램 -->
+                <!-- Histogram -->
                 <div style="margin-top: 20px;">
-                    <strong>차선 픽셀 분포 (히스토그램)</strong>
+                    <strong>Lane Pixel Distribution (Histogram)</strong>
                     <div class="histogram">
                         <div style="flex: 1; text-align: center;">
                             <div class="histogram-bar left" id="histLeft" style="height: 0%;">
                                 <span class="histogram-value" id="histLeftValue">0</span>
                             </div>
-                            <div class="histogram-label">왼쪽</div>
+                            <div class="histogram-label">Left</div>
                         </div>
                         <div style="flex: 1; text-align: center;">
                             <div class="histogram-bar center" id="histCenter" style="height: 0%;">
                                 <span class="histogram-value" id="histCenterValue">0</span>
                             </div>
-                            <div class="histogram-label">중앙</div>
+                            <div class="histogram-label">Center</div>
                         </div>
                         <div style="flex: 1; text-align: center;">
                             <div class="histogram-bar right" id="histRight" style="height: 0%;">
                                 <span class="histogram-value" id="histRightValue">0</span>
                             </div>
-                            <div class="histogram-label">오른쪽</div>
+                            <div class="histogram-label">Right</div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- 오른쪽: 제어 패널 -->
+            <!-- Right: Control Panel -->
             <div class="card">
-                <div class="card-title">🎮 제어</div>
+                <div class="card-title">🎮 Control</div>
                 <div class="control-panel">
                     <button class="btn btn-start" id="btnStart" onclick="startAutonomous()">
-                        ▶️ 자율주행 시작
+                        ▶️ Start Autonomous
                     </button>
                     <button class="btn btn-stop" id="btnStop" onclick="stopAutonomous()" disabled>
-                        ⏹️ 자율주행 중지
+                        ⏹️ Stop Autonomous
                     </button>
                     <button class="btn btn-analyze" id="btnAnalyze" onclick="analyzeSingleFrame()">
-                        🔍 단일 프레임 분석
+                        🔍 Analyze Single Frame
                     </button>
                     <div id="analysisTimer" class="analysis-timer" style="display: none;">
-                        분석 결과 표시: <span id="analysisCountdown">5</span>초
+                        Analysis display: <span id="analysisCountdown">5</span>s
                     </div>
                     <div id="analysisResult" class="analysis-result" style="display: none;">
                         <div class="result-item">
-                            <span class="result-label">방향 판단:</span>
+                            <span class="result-label">Direction:</span>
                             <span class="result-value" id="resultCommand">-</span>
                         </div>
                         <div class="result-item">
-                            <span class="result-label">주행 상태:</span>
+                            <span class="result-label">State:</span>
                             <span class="result-value" id="resultState">-</span>
                         </div>
                         <div class="result-item">
-                            <span class="result-label">신뢰도:</span>
+                            <span class="result-label">Confidence:</span>
                             <span class="result-value" id="resultConfidence">-</span>
                         </div>
                     </div>
                 </div>
 
-                <!-- 상태 표시 -->
+                <!-- Status Display -->
                 <div class="status-box">
                     <div class="status-item">
-                        <div class="status-label">실행 상태</div>
-                        <div class="status-value status-stopped" id="statusRunning">정지</div>
+                        <div class="status-label">Status</div>
+                        <div class="status-value status-stopped" id="statusRunning">Stopped</div>
                     </div>
                     <div class="status-item">
-                        <div class="status-label">현재 명령</div>
+                        <div class="status-label">Command</div>
                         <div class="status-value" id="statusCommand">-</div>
                     </div>
                     <div class="status-item">
-                        <div class="status-label">주행 상태</div>
+                        <div class="status-label">State</div>
                         <div class="status-value" id="statusState">-</div>
                     </div>
                     <div class="status-item">
-                        <div class="status-label">신뢰도</div>
+                        <div class="status-label">Confidence</div>
                         <div class="status-value" id="statusConfidence">-</div>
                     </div>
                 </div>
 
-                <!-- 통계 -->
+                <!-- Statistics -->
                 <div style="margin-top: 30px;">
-                    <strong>통계</strong>
+                    <strong>Statistics</strong>
                     <div class="stats-grid">
                         <div class="stat-card">
-                            <div class="stat-label">처리 프레임</div>
+                            <div class="stat-label">Frames</div>
                             <div class="stat-value" id="statFrames">0</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-label">명령 전송</div>
+                            <div class="stat-label">Commands</div>
                             <div class="stat-value" id="statCommands">0</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-label">오류</div>
+                            <div class="stat-label">Errors</div>
                             <div class="stat-value" id="statErrors">0</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-label">경과 시간</div>
+                            <div class="stat-label">Elapsed</div>
                             <div class="stat-value" id="statTime">0s</div>
                         </div>
                         <div class="stat-card">
                             <div class="stat-label">FPS</div>
                             <div class="stat-value" id="statFPS">0</div>
                         </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Frame Time</div>
+                            <div class="stat-value" id="statFrameTime">0ms</div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- 로그 -->
+        <!-- Log -->
         <div class="card">
-            <div class="card-title">📜 시스템 로그</div>
+            <div class="card-title">📜 System Log</div>
             <div class="log-box" id="logBox">
-                <div class="log-entry">시스템 준비 완료...</div>
+                <div class="log-entry">System ready...</div>
             </div>
         </div>
     </div>
@@ -589,15 +593,15 @@
                 const data = await response.json();
                 
                 if (!data.success) {
-                    showStreamStatus(`카메라 연결 실패: ${data.error}`, true);
-                    addLog(`✗ 카메라 연결 실패: ${data.error}`, 'error');
+                    showStreamStatus(`Camera connection failed: ${data.error}`, true);
+                    addLog(`✗ Camera connection failed: ${data.error}`, 'error');
                     return false;
                 }
-                addLog('✓ 카메라 연결 성공', 'success');
+                addLog('✓ Camera connected', 'success');
                 return true;
             } catch (e) {
-                showStreamStatus(`카메라 체크 오류: ${e.message}`, true);
-                addLog(`✗ 카메라 체크 오류: ${e.message}`, 'error');
+                showStreamStatus(`Camera check error: ${e.message}`, true);
+                addLog(`✗ Camera check error: ${e.message}`, 'error');
                 return false;
             }
         }
@@ -607,12 +611,12 @@
         let streamFrameCount = 0;
         
         async function initStream() {
-            showStreamStatus('카메라 연결 확인 중...');
-            addLog('카메라 연결 확인 중...', 'info');
+            showStreamStatus('Checking camera connection...');
+            addLog('Checking camera connection...', 'info');
             
             if (await checkCamera()) {
-                addLog('✓ 카메라 연결 확인 완료', 'success');
-                addLog('ESP32-CAM /capture 엔드포인트를 사용하여 스트림 시작...', 'info');
+                addLog('✓ Camera connection verified', 'success');
+                addLog('Starting stream using ESP32-CAM /capture endpoint...', 'info');
                 startStreamPolling();
             }
         }
@@ -653,12 +657,12 @@
                     // 첫 프레임 로드 시
                     if (streamFrameCount === 1) {
                         hideStreamStatus();
-                        addLog('✓ 스트림 연결 성공 (/capture 폴링 방식)', 'success');
+                        addLog('✓ Stream connected (/capture polling)', 'success');
                     }
                     
                     // 10 프레임마다 로그
                     if (streamFrameCount % 50 === 0) {
-                        addLog(`스트림 정상 동작 중 (프레임: ${streamFrameCount})`, 'info');
+                        addLog(`Stream running (frames: ${streamFrameCount})`, 'info');
                     }
                 };
                 
@@ -679,28 +683,28 @@
             if (streamInterval) {
                 clearInterval(streamInterval);
                 streamInterval = null;
-                addLog('스트림 폴링 중지', 'info');
+                addLog('Stream polling stopped', 'info');
             }
         }
 
         // 스트림 에러 처리
         function handleStreamError() {
-            showStreamStatus('스트림 연결 실패', true);
-            addLog('✗ 스트림 연결 실패', 'error');
+            showStreamStatus('Stream connection failed', true);
+            addLog('✗ Stream connection failed', 'error');
         }
 
         // 스트림 재시도
         function retryStream() {
             if (streamRetryCount >= MAX_RETRY) {
-                showStreamStatus('재시도 횟수 초과. 페이지를 새로고침하세요.', true);
-                addLog('✗ 재시도 횟수 초과', 'error');
+                showStreamStatus('Max retries exceeded. Please refresh the page.', true);
+                addLog('✗ Max retries exceeded', 'error');
                 return;
             }
 
             streamRetryCount++;
             streamFrameCount = 0;
-            showStreamStatus('스트림 재연결 중...');
-            addLog('스트림 재연결 시도...', 'info');
+            showStreamStatus('Reconnecting stream...');
+            addLog('Attempting stream reconnection...', 'info');
             
             startStreamPolling();
         }
@@ -708,17 +712,29 @@
         // 자율주행 시작
         async function startAutonomous() {
             try {
-                addLog('자율주행 시작 요청...', 'info');
+                addLog('🚀 Starting autonomous driving...', 'info');
+                
+                // Disable button immediately
+                document.getElementById('btnStart').disabled = true;
+                document.getElementById('statusRunning').textContent = 'Starting...';
                 
                 const response = await fetch('/api/autonomous/start', {
                     method: 'POST'
                 });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP ${response.status}`);
+                }
+                
                 const data = await response.json();
 
                 if (data.success) {
                     addLog('✓ Autonomous driving started - Commands will be sent to ESP32', 'success');
                     document.getElementById('btnStart').disabled = true;
                     document.getElementById('btnStop').disabled = false;
+                    document.getElementById('statusRunning').textContent = 'Running';
+                    document.getElementById('statusRunning').className = 'status-value status-running';
                     
                     // Mark autonomous as running
                     autonomousRunning = true;
@@ -742,17 +758,27 @@
                             data.initial_frame.confidence ? (data.initial_frame.confidence * 100).toFixed(1) + '%' : '-';
                     }
                 } else {
-                    addLog('✗ Start failed: ' + data.message, 'error');
+                    addLog('✗ Start failed: ' + (data.error || data.message), 'error');
+                    document.getElementById('btnStart').disabled = false;
+                    document.getElementById('statusRunning').textContent = 'Error';
                 }
             } catch (error) {
-                addLog('✗ 오류: ' + error.message, 'error');
+                addLog('✗ Error starting autonomous: ' + error.message, 'error');
+                document.getElementById('btnStart').disabled = false;
+                document.getElementById('statusRunning').textContent = 'Error';
+                document.getElementById('statusRunning').className = 'status-value status-stopped';
             }
         }
 
         // 자율주행 중지
         async function stopAutonomous() {
             try {
-                addLog('자율주행 중지 요청...', 'info');
+                addLog('🛑 Stopping autonomous driving...', 'info');
+                
+                // Immediately update UI to show stopping
+                document.getElementById('statusRunning').textContent = 'Stopping...';
+                document.getElementById('statusRunning').className = 'status-value status-stopped';
+                document.getElementById('btnStop').disabled = true;
                 
                 const response = await fetch('/api/autonomous/stop', {
                     method: 'POST'
@@ -760,12 +786,17 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    addLog('✓ Autonomous driving stopped - Commands stopped (stream continues)', 'success');
+                    addLog('✓ Autonomous driving stopped - Motor STOP command sent', 'success');
                     document.getElementById('btnStart').disabled = false;
                     document.getElementById('btnStop').disabled = true;
                     
                     // Mark autonomous as not running
                     autonomousRunning = false;
+                    
+                    // Update status immediately
+                    document.getElementById('statusRunning').textContent = 'Stopped';
+                    document.getElementById('statusCommand').textContent = 'STOP';
+                    document.getElementById('statusCommand').style.color = '#ee0979';
                     
                     // 상태 폴링 중지
                     stopStatusPolling();
@@ -774,11 +805,20 @@
                     if (data.stats) {
                         updateStats(data.stats);
                     }
+                    
+                    // Resume stream polling for monitoring
+                    if (!streamInterval) {
+                        startStreamPolling();
+                    }
                 } else {
-                    addLog('✗ 중지 실패: ' + data.message, 'error');
+                    addLog('✗ Stop failed: ' + data.message, 'error');
+                    document.getElementById('statusRunning').textContent = 'Error';
+                    document.getElementById('btnStop').disabled = false;
                 }
             } catch (error) {
-                addLog('✗ 오류: ' + error.message, 'error');
+                addLog('✗ Error: ' + error.message, 'error');
+                document.getElementById('statusRunning').textContent = 'Error';
+                document.getElementById('btnStop').disabled = false;
             }
         }
 
@@ -803,17 +843,24 @@
                 const btnAnalyze = document.getElementById('btnAnalyze');
                 btnAnalyze.classList.add('analyzing');
                 btnAnalyze.disabled = true;
+                btnAnalyze.textContent = '⏳ Analyzing...';
                 
-                addLog('단일 프레임 분석 중...', 'info');
+                addLog('🔍 Analyzing single frame...', 'info');
                 
                 const response = await fetch('/api/autonomous/analyze', {
                     method: 'POST'
                 });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP ${response.status}`);
+                }
+                
                 const data = await response.json();
 
                 if (data.success) {
-                    addLog(`✓ 분석 완료: ${data.command} (신뢰도: ${(data.confidence * 100).toFixed(1)}%)`, 'success');
-                    addLog('분석 결과를 5초간 표시합니다...', 'info');
+                    addLog(`✓ Analysis complete: ${data.command} (confidence: ${(data.confidence * 100).toFixed(1)}%)`, 'success');
+                    addLog('Displaying analysis result for 5 seconds...', 'info');
                     
                     // Show countdown timer
                     const timerDiv = document.getElementById('analysisTimer');
@@ -872,7 +919,7 @@
                             // 원본 스트림 복구
                             if (originalStreamSrc) {
                                 videoStream.src = originalStreamSrc;
-                                addLog('분석 결과 표시 종료', 'info');
+                                addLog('Analysis display ended', 'info');
                             }
                             analysisTimer = null;
                             
@@ -880,6 +927,7 @@
                             const btnAnalyze = document.getElementById('btnAnalyze');
                             btnAnalyze.classList.remove('analyzing');
                             btnAnalyze.disabled = false;
+                            btnAnalyze.textContent = '🔍 Analyze Single Frame';
                             
                             // 타이머와 결과 패널 숨기기
                             document.getElementById('analysisTimer').style.display = 'none';
@@ -897,10 +945,20 @@
                         }
                     }
                 } else {
-                    addLog('✗ 분석 실패: ' + data.error, 'error');
+                    addLog('✗ Analysis failed: ' + (data.error || 'Unknown error'), 'error');
+                    // Reset button
+                    const btnAnalyze = document.getElementById('btnAnalyze');
+                    btnAnalyze.classList.remove('analyzing');
+                    btnAnalyze.disabled = false;
+                    btnAnalyze.textContent = '🔍 Analyze Single Frame';
                 }
             } catch (error) {
-                addLog('✗ 오류: ' + error.message, 'error');
+                addLog('✗ Analysis error: ' + error.message, 'error');
+                // Reset button
+                const btnAnalyze = document.getElementById('btnAnalyze');
+                btnAnalyze.classList.remove('analyzing');
+                btnAnalyze.disabled = false;
+                btnAnalyze.textContent = '🔍 Analyze Single Frame';
             }
         }
         
@@ -937,7 +995,7 @@
                         }
                         
                         // 상태 업데이트
-                        document.getElementById('statusRunning').textContent = data.is_running ? '실행 중' : '정지';
+                        document.getElementById('statusRunning').textContent = data.is_running ? 'Running' : 'Stopped';
                         document.getElementById('statusRunning').className = data.is_running ? 'status-value status-running' : 'status-value status-stopped';
                         
                         if (data.last_command) {
@@ -999,6 +1057,20 @@
             document.getElementById('statErrors').textContent = stats.errors || 0;
             document.getElementById('statTime').textContent = stats.elapsed_time || '0s';
             document.getElementById('statFPS').textContent = stats.fps || '0';
+            
+            // Frame time with color coding
+            const frameTime = stats.last_frame_time || 0;
+            const frameTimeEl = document.getElementById('statFrameTime');
+            frameTimeEl.textContent = frameTime + 'ms';
+            
+            // Color code based on speed
+            if (frameTime < 100) {
+                frameTimeEl.style.color = '#38ef7d';  // Green - Fast
+            } else if (frameTime < 200) {
+                frameTimeEl.style.color = '#f39c12';  // Orange - OK
+            } else {
+                frameTimeEl.style.color = '#ee0979';  // Red - Slow
+            }
         }
 
         // 히스토그램 업데이트
@@ -1036,9 +1108,9 @@
 
         // 페이지 로드 시 초기화
         window.addEventListener('load', () => {
-            addLog('자율주행 모니터링 시스템 준비 완료', 'success');
+            addLog('Autonomous driving monitoring system ready', 'success');
             addLog(`ESP32-CAM IP: ${ESP32_IP}`, 'info');
-            addLog('카메라 스트림: /capture 폴링 방식 사용', 'info');
+            addLog('Camera stream: Using /capture polling method', 'info');
             initStream();
         });
         

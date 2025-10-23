@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -28,10 +28,10 @@
                         <span class="fps-counter" id="fps-counter">FPS: --</span>
                     </div>
                     <div class="stream-container">
-                        <img id="camera-stream" alt="카메라 스트림" 
+                        <img id="camera-stream" alt="Camera Stream" 
                              onerror="handleStreamError()">
                         <div class="stream-overlay" id="stream-overlay">
-                            <p>카메라 연결 중...</p>
+                            <p>Connecting to camera...</p>
                         </div>
                     </div>
                 </div>
@@ -41,27 +41,27 @@
                     <h3>{{ config.UI_TEXT.status_title }}</h3>
                     <div class="status-grid">
                         <div class="status-item">
-                            <span class="label">IP 주소:</span>
+                            <span class="label">IP Address:</span>
                             <span id="ip-address" class="value">{{ esp32_ip }}</span>
                         </div>
                         <div class="status-item">
-                            <span class="label">모터 상태:</span>
+                            <span class="label">Motor Status:</span>
                             <span id="motor-status" class="value">-</span>
                         </div>
                         <div class="status-item">
-                            <span class="label">현재 명령:</span>
+                            <span class="label">Current Command:</span>
                             <span id="current-command" class="value">-</span>
                         </div>
                         <div class="status-item">
-                            <span class="label">속도:</span>
+                            <span class="label">Speed:</span>
                             <span id="speed-value" class="value">-</span>
                         </div>
                         <div class="status-item">
-                            <span class="label">LED 상태:</span>
+                            <span class="label">LED Status:</span>
                             <span id="led-status" class="value">-</span>
                         </div>
                         <div class="status-item">
-                            <span class="label">밝기:</span>
+                            <span class="label">Brightness:</span>
                             <span id="brightness-value" class="value">-</span>
                         </div>
                     </div>
@@ -127,7 +127,7 @@
                     <h3>{{ config.UI_TEXT.led_title }}</h3>
                     <div class="led-controls">
                         <div class="led-toggle-wrapper">
-                            <span class="led-label">LED 상태</span>
+                            <span class="led-label">LED Status</span>
                             <label class="toggle-switch">
                                 <input type="checkbox" id="led-toggle" onchange="toggleLED()">
                                 <span class="toggle-slider"></span>
@@ -153,7 +153,7 @@
                     <div class="camera-controls">
                         <!-- 기본 설정 -->
                         <div class="camera-section">
-                            <h4 class="camera-section-title">🌟 기본 설정</h4>
+                            <h4 class="camera-section-title">🌟 Basic Settings</h4>
                             
                             <div class="slider-group">
                                 <label for="brightness-slider">{{ config.CAMERA_PARAMS.brightness.name }} ({{ config.CAMERA_PARAMS.brightness.min }} ~ {{ config.CAMERA_PARAMS.brightness.max }}):</label>
@@ -192,7 +192,7 @@
                         
                         <!-- 노출 설정 -->
                         <div class="camera-section">
-                            <h4 class="camera-section-title">💡 노출/게인 설정</h4>
+                            <h4 class="camera-section-title">💡 Exposure/Gain Settings</h4>
                             
                             <div class="slider-group">
                                 <label for="agc-slider">{{ config.CAMERA_PARAMS.agc_gain.name }} ({{ config.CAMERA_PARAMS.agc_gain.min }} ~ {{ config.CAMERA_PARAMS.agc_gain.max }}):</label>
@@ -242,7 +242,7 @@
                         
                         <!-- 품질/노이즈 설정 -->
                         <div class="camera-section">
-                            <h4 class="camera-section-title">🖼️ 품질/노이즈</h4>
+                            <h4 class="camera-section-title">🖼️ Quality/Noise</h4>
                             
                             <div class="slider-group">
                                 <label for="quality-slider">{{ config.CAMERA_PARAMS.quality.name }} ({{ config.CAMERA_PARAMS.quality.min }} ~ {{ config.CAMERA_PARAMS.quality.max }}, 낮을수록 고품질):</label>
@@ -270,11 +270,11 @@
                         <button class="btn-secondary" onclick="resetCamera()">
                             {{ config.UI_TEXT.camera_reset }}
                         </button>
-                        <button class="btn-secondary" onclick="applyNightMode()">
-                            🌙 야간 모드
+                            <button class="btn-secondary" onclick="applyNightMode()">
+                            🌙 Night Mode
                         </button>
                         <button class="btn-secondary" onclick="applyDayMode()">
-                            ☀️ 주간 모드
+                            ☀️ Day Mode
                         </button>
                     </div>
                 </div>
@@ -284,10 +284,10 @@
         <!-- 빠른 액션 버튼 -->
         <div style="text-align: center; margin-top: 30px; padding: 20px;">
             <a href="/autonomous" style="display: inline-block; padding: 20px 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; border-radius: 15px; font-size: 1.3rem; font-weight: bold; box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3); transition: all 0.3s;" onmouseover="this.style.transform='translateY(-5px)'; this.style.boxShadow='0 15px 40px rgba(102, 126, 234, 0.5)';" onmouseout="this.style.transform=''; this.style.boxShadow='0 10px 30px rgba(102, 126, 234, 0.3)';">
-                🚗 자율주행 모드로 전환
+                🚗 Switch to Autonomous Mode
             </a>
             <a href="/ai-demo" style="display: inline-block; padding: 20px 40px; margin-left: 20px; background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; text-decoration: none; border-radius: 15px; font-size: 1.3rem; font-weight: bold; box-shadow: 0 10px 30px rgba(56, 239, 125, 0.3); transition: all 0.3s;" onmouseover="this.style.transform='translateY(-5px)'; this.style.boxShadow='0 15px 40px rgba(56, 239, 125, 0.5)';" onmouseout="this.style.transform=''; this.style.boxShadow='0 10px 30px rgba(56, 239, 125, 0.3)';">
-                🤖 AI 데모 보기
+                🤖 View AI Demo
             </a>
         </div>
         

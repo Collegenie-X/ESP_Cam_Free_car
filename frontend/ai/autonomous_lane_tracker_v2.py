@@ -58,6 +58,7 @@ class AutonomousLaneTrackerV2:
     def process_frame(self, image: np.ndarray, debug: bool = False) -> Dict[str, Any]:
         """
         프레임 처리 및 조향 판단 (전체 파이프라인)
+        최적화: ROI를 먼저 추출하여 처리량 감소
 
         Args:
             image: 원본 이미지 (BGR)
@@ -75,54 +76,52 @@ class AutonomousLaneTrackerV2:
         try:
             debug_images = {}
 
-            # 1단계: CLAHE 전처리
-            enhanced = self.preprocessor.apply_clahe(image)
+            # 최적화: ROI를 먼저 추출 (처리할 픽셀 수 감소)
+            roi_bottom = self.preprocessor.extract_roi(image, self.ROI_BOTTOM)
             if debug:
-                debug_images["1_clahe"] = enhanced
+                debug_images["1_roi_original"] = roi_bottom
 
-            # 2단계: 가우시안 블러
+            # 1단계: CLAHE 전처리 (ROI에만 적용)
+            enhanced = self.preprocessor.apply_clahe(roi_bottom)
+            if debug:
+                debug_images["2_clahe"] = enhanced
+
+            # 2단계: 가우시안 블러 (ROI에만 적용)
             blurred = self.preprocessor.apply_gaussian_blur(enhanced)
             if debug:
-                debug_images["2_blurred"] = blurred
+                debug_images["3_blurred"] = blurred
 
-            # 3단계: ROI 추출 (하단)
-            roi_bottom = self.preprocessor.extract_roi(blurred, self.ROI_BOTTOM)
-            if debug:
-                debug_images["3_roi_bottom"] = roi_bottom
+            # 3단계: HSV 변환
+            hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
 
-            # 4단계: HSV 변환
-            hsv = cv2.cvtColor(roi_bottom, cv2.COLOR_BGR2HSV)
-
-            # 5단계: 차선 마스크 생성
+            # 4단계: 차선 마스크 생성
             if self.use_adaptive:
-                mask = self.mask_generator.create_adaptive_mask(hsv, roi_bottom)
+                mask = self.mask_generator.create_adaptive_mask(hsv, blurred)
             else:
                 mask = self.mask_generator.create_lane_mask(hsv, is_dark=False)
 
             if debug:
-                debug_images["5_mask"] = mask
+                debug_images["4_mask"] = mask
 
-            # 6단계: 노이즈 제거
+            # 5단계: 노이즈 제거
             clean_mask = self.noise_filter.remove_noise(mask)
             if debug:
-                debug_images["6_clean_mask"] = clean_mask
+                debug_images["5_clean_mask"] = clean_mask
 
-            # 7단계: 조향 판단
+            # 6단계: 조향 판단
             command, histogram, confidence = self.steering_judge.judge_steering(
                 clean_mask
             )
 
-            # 8단계: 90도 코너 감지
-            if self.corner_detector.is_corner_detected(clean_mask, histogram):
-                self.state = "CORNER_DETECTED"
-
-                # LookAhead ROI로 방향 판단
-                corner_command = self._judge_corner_direction(blurred)
-                if corner_command:
-                    command = corner_command
-                    self.state = "TURNING"
-            else:
-                self.state = "NORMAL_DRIVING"
+            # 7단계: 90도 코너 감지 (선택적 - 성능 우선시 비활성화)
+            # if self.corner_detector.is_corner_detected(clean_mask, histogram):
+            #     self.state = "CORNER_DETECTED"
+            #     corner_command = self._judge_corner_direction(image)
+            #     if corner_command:
+            #         command = corner_command
+            #         self.state = "TURNING"
+            # else:
+            self.state = "NORMAL_DRIVING"
 
             # 결과 구성
             result = {
