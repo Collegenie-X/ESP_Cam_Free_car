@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class ESP32Communication:
     """ESP32-CAM 통신 클래스"""
 
-    def __init__(self, base_url: str, timeout: int = 5):
+    def __init__(self, base_url: str, timeout: int = 2):
         """
         ESP32 통신 서비스 초기화
 
@@ -28,6 +28,13 @@ class ESP32Communication:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.last_command = None
+
+        # ✅ HTTP 세션 재사용 (연결 유지)
+        self.session = requests.Session()
+        self.session.headers.update(
+            {"Connection": "keep-alive", "Keep-Alive": "timeout=5, max=100"}
+        )
+
         logger.info(f"ESP32 통신 초기화: {self.base_url}")
 
     def check_connection(self) -> bool:
@@ -93,49 +100,99 @@ class ESP32Communication:
             이미지 (BGR) 또는 None
         """
         try:
-            response = requests.get(f"{self.base_url}/capture", timeout=self.timeout)
+            # ✅ 세션 재사용 + 짧은 타임아웃
+            response = self.session.get(
+                f"{self.base_url}/capture",
+                timeout=self.timeout,
+                stream=True,  # 스트리밍 모드
+            )
+
             if response.status_code == 200:
-                nparr = np.frombuffer(response.content, np.uint8)
+                # ✅ 청크 단위로 읽기 (메모리 효율)
+                content = b""
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        content += chunk
+
+                # 이미지 디코딩
+                nparr = np.frombuffer(content, np.uint8)
                 image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
                 return image
             return None
+
         except requests.exceptions.RequestException as e:
             logger.error(f"프레임 가져오기 실패: {e}")
             return None
 
-    def polling_generator(self, fps: int = 5):
+    def polling_generator(self, fps: int = 3):
         """
         폴링 모드 제너레이터 (/capture 주기적 호출)
 
         Args:
-            fps: 초당 프레임 수
+            fps: 초당 프레임 수 (기본값: 3 FPS)
 
         Yields:
             이미지 (BGR)
         """
         interval = 1.0 / fps
         frame_count = 0
+        error_count = 0
+        last_success = time.time()
 
-        logger.info(f"폴링 모드 시작: {fps}fps")
+        logger.info(f"✅ 폴링 모드 시작: {fps}fps (간격: {interval*1000:.0f}ms)")
 
         while True:
             start_time = time.time()
 
-            # 프레임 가져오기
-            image = self.get_frame()
-            if image is not None:
-                frame_count += 1
-                if frame_count % 10 == 0:
-                    logger.info(f"폴링 프레임 수신: {frame_count}")
-                yield image
-            else:
-                logger.warning("빈 프레임 수신")
+            try:
+                # 프레임 가져오기
+                image = self.get_frame()
 
-            # FPS 유지
+                if image is not None:
+                    frame_count += 1
+                    error_count = 0  # 에러 카운트 리셋
+                    last_success = time.time()
+
+                    if frame_count % 10 == 0:
+                        logger.info(
+                            f"✓ 폴링 프레임: {frame_count} | FPS: {1.0/(time.time() - start_time):.1f}"
+                        )
+
+                    yield image
+                else:
+                    error_count += 1
+                    logger.warning(f"⚠️ 빈 프레임 ({error_count}번째)")
+
+                    # 연속 실패 시 짧은 대기
+                    if error_count > 3:
+                        time.sleep(0.1)
+
+                    # 장시간 실패 시 재연결
+                    if time.time() - last_success > 5:
+                        logger.warning("🔄 5초 이상 실패 - 세션 재설정")
+                        self.session = requests.Session()
+                        self.session.headers.update(
+                            {
+                                "Connection": "keep-alive",
+                                "Keep-Alive": "timeout=5, max=100",
+                            }
+                        )
+                        last_success = time.time()
+                        error_count = 0
+
+            except Exception as e:
+                logger.error(f"⚠️ 폴링 오류: {e}")
+                error_count += 1
+                time.sleep(0.1)
+
+            # FPS 유지 (더 정확한 타이밍)
             elapsed = time.time() - start_time
             sleep_time = max(0, interval - elapsed)
+
             if sleep_time > 0:
                 time.sleep(sleep_time)
+            elif elapsed > interval * 1.5:  # 너무 느린 경우
+                logger.warning(f"⚠️ 프레임 지연: {elapsed*1000:.0f}ms")
 
     def stream_generator(self):
         """

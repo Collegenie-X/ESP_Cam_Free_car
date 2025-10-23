@@ -18,11 +18,11 @@ class Settings:
     ESP32_BASE_URL = f"http://{ESP32_IP}:{ESP32_PORT}"
 
     # 스트림 설정
-    TARGET_FPS = int(os.getenv("TARGET_FPS", "5"))
+    TARGET_FPS = int(os.getenv("TARGET_FPS", "10"))  # ✅ 10 FPS (고속 캡처 최적화)
     STREAM_TIMEOUT = 30
     USE_POLLING_MODE = (
         os.getenv("USE_POLLING_MODE", "True").lower() == "true"
-    )  # True: /capture 폴링, False: /stream
+    )  # True: /capture 폴링 (권장, 빠름), False: /stream
 
     # 차선 추적 설정
     BRIGHTNESS_THRESHOLD = int(os.getenv("BRIGHTNESS_THRESHOLD", "80"))

@@ -100,18 +100,20 @@ void registerUriHandlers() {
 bool startHttpServer() {
     Serial.println("HTTP 서버 시작 중...");
     
-    // 서버 설정
+    // ✅ 서버 설정 최적화 (제어 명령 응답성 우선)
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.server_port = 80;                    // 포트 번호
     config.ctrl_port = 32768;                   // 제어 포트
-    config.max_open_sockets = 10;               // 최대 소켓 수 (스트림+제어 동시 처리)
+    config.max_open_sockets = 7;                // 최대 소켓 수 (스트림 1개 + 제어 요청 여러개)
     config.max_uri_handlers = 12;               // 최대 URI 핸들러 수
     config.max_resp_headers = 8;                // 최대 응답 헤더 수
     config.backlog_conn = 5;                    // 백로그 연결 수
     config.lru_purge_enable = true;             // LRU 제거 활성화 (오래된 연결 자동 정리)
-    config.recv_wait_timeout = 5;               // 수신 대기 타임아웃 (초)
-    config.send_wait_timeout = 5;               // 전송 대기 타임아웃 (초)
-    config.stack_size = 8192;                   // 핸들러 스택 크기 증가 (동시 처리 개선)
+    config.recv_wait_timeout = 10;              // 수신 대기 타임아웃 (10초)
+    config.send_wait_timeout = 10;              // 전송 대기 타임아웃 (10초)
+    config.stack_size = 8192;                   // 핸들러 스택 크기 (동시 처리)
+    config.task_priority = 5;                   // 태스크 우선순위
+    config.core_id = tskNO_AFFINITY;            // ✅ 코어 고정 해제 (양쪽 코어 사용으로 동시 처리 개선)
     
     // 서버 시작
     if (httpd_start(&server, &config) != ESP_OK) {

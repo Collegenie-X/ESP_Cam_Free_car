@@ -28,6 +28,7 @@
 // Config 모듈
 #include "config/wifi_config.h"
 #include "config/pin_config.h"
+#include "config/stream_config.h"
 
 // Camera 모듈
 #include "camera/camera_init.h"
@@ -126,7 +127,10 @@ void setup() {
     Serial.printf("⚡ 속도 제어: http://%s/speed?op=[plus|minus]&step=10\n", WiFi.localIP().toString().c_str());
     Serial.printf("📷 카메라 제어: http://%s/camera?param=[brightness|agc_gain]&value=N\n", WiFi.localIP().toString().c_str());
     Serial.printf("📊 상태: http://%s/status\n", WiFi.localIP().toString().c_str());
-    Serial.println("============================================\n");
+    Serial.println("============================================");
+    
+    // 8. 스트림 설정 정보 출력
+    printStreamConfig();
     
 
     

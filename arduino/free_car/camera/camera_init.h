@@ -30,26 +30,26 @@ camera_config_t getCameraConfig() {
     config.pin_href = CAMERA_PIN_HREF;
     config.pin_pclk = CAMERA_PIN_PCLK;
     
-    // 카메라 설정
-    config.xclk_freq_hz = 20000000;           // XCLK 주파수 (20MHz)
+    // 카메라 설정 (캡처 속도 + 품질 균형)
+    config.xclk_freq_hz = 20000000;           // ✅ XCLK 주파수 (20MHz - 안정적)
     config.ledc_timer = LEDC_TIMER_0;         // LEDC 타이머
     config.ledc_channel = LEDC_CHANNEL_0;     // LEDC 채널
     
     config.pixel_format = PIXFORMAT_JPEG;     // JPEG 포맷
     
-    // PSRAM 사용 가능 여부에 따라 최적 설정 적용 (wifi_html_free_car.ino 방식)
+    // ✅ 자율주행 최적화 (속도 + 품질 균형)
     if (psramFound()) {
-        // PSRAM 있음: 고화질 모드
-        config.frame_size = FRAMESIZE_QVGA;    // 640x480 (고해상도)
-        config.jpeg_quality = 10;              // 더 낮은 압축 = 더 고품질 (밝기 향상)
-        config.fb_count = 2;                  // 이중 버퍼
-        Serial.println("PSRAM 감지: 고화질 모드 (VGA, Q=8)");
+        // PSRAM 있음: 품질 개선 버전
+        config.frame_size = FRAMESIZE_QVGA;   // ✅ 320x240 (빠른 속도)
+        config.jpeg_quality = 10;              // ✅ 품질 8 (선명한 이미지)
+        config.fb_count = 1;                  // 단일 버퍼 (빠른 반환)
+        Serial.println("✅ PSRAM 감지: 균형 모드 (QVGA 320x240, Q=10, 20MHz)");
     } else {
-        // PSRAM 없음: 중간 화질 모드
-        config.frame_size = FRAMESIZE_HVGA;   // 480x320 (중간 해상도)
-        config.jpeg_quality = 10;             // 품질 향상
+        // PSRAM 없음: 기본 품질
+        config.frame_size = FRAMESIZE_QVGA;   // 320x240 (작은 해상도)
+        config.jpeg_quality = 10;             // 품질 10 (적절한 균형)
         config.fb_count = 1;                  // 단일 버퍼
-        Serial.println("PSRAM 미감지: 중간 화질 모드 (HVGA, Q=10)");
+        Serial.println("✅ PSRAM 미감지: 균형 모드 (QVGA 320x240, Q=10, 20MHz)");
     }
     
     return config;
@@ -79,29 +79,28 @@ bool initCamera() {
         return false;
     }
     
-    // 센서 설정 최적화 (밝기 최대 향상)
-    sensor->set_brightness(sensor, 2);        // 밝기: -2 ~ 2 (최대)
-    sensor->set_contrast(sensor, 2);          // 대비: -2 ~ 2 (최대)
-    sensor->set_saturation(sensor, 1);        // 채도: -2 ~ 2 (약간 증가, 2는 과포화 가능)
+    // ✅ 센서 설정 최적화 (품질 + 속도 균형)
+    sensor->set_brightness(sensor, 2);        // 밝기: 1 (적당히 밝게)
+    sensor->set_contrast(sensor, 2);          // 대비: 1 (차선 구분 향상)
+    sensor->set_saturation(sensor, 2);        // 채도: 0 (자연스러운 색상)
     sensor->set_special_effect(sensor, 0);    // 특수 효과: 0 (없음)
     sensor->set_whitebal(sensor, 1);          // 화이트 밸런스: 1 (자동)
     sensor->set_awb_gain(sensor, 1);          // AWB 게인: 1 (활성화)
     sensor->set_wb_mode(sensor, 0);           // WB 모드: 0 (자동)
     sensor->set_exposure_ctrl(sensor, 1);     // 노출 제어: 1 (자동)
-    sensor->set_aec2(sensor, 1);              // AEC2: 1 (활성화로 노출 향상)
-    sensor->set_ae_level(sensor, 2);          // AE 레벨: -2 ~ 2 (노출 보정, 2=최대 밝게)
-    sensor->set_aec_value(sensor, 2000);      // AEC 값: 수동 노출 시간 (높을수록 밝음, 기본 300)
+    sensor->set_aec2(sensor, 1);              // ✅ AEC2: 1 (활성화 - 품질 개선)
+    sensor->set_ae_level(sensor, 1);          // ✅ AE 레벨: 1 (약간 밝게)
+    sensor->set_aec_value(sensor, 1200);       // ✅ AEC 값: 400 (적절한 노출)
     sensor->set_gain_ctrl(sensor, 1);         // 게인 제어: 1 (자동)
-    sensor->set_agc_gain(sensor, 30);         // AGC 게인: 0~30 (20으로 대폭 증가)
-    sensor->set_gainceiling(sensor, (gainceiling_t)6);  // 게인 상한 (0~6, 6=최대)
-    sensor->set_bpc(sensor, 0);               // BPC: 0 (비활성화)
-    sensor->set_wpc(sensor, 1);               // WPC: 1 (활성화)
-    sensor->set_raw_gma(sensor, 1);           // RAW GMA: 1 (활성화, 감마 보정으로 어두운 부분 밝게)
-    sensor->set_lenc(sensor, 1);              // 렌즈 보정: 1 (활성화)
-    // 미러/플립은 필요 시 변경 가능. 스트리밍 방향이 거꾸로면 두 값을 1로 설정하세요.
+    sensor->set_agc_gain(sensor, 30);          // ✅ AGC 게인: 8 (밝기 증가)
+    sensor->set_gainceiling(sensor, (gainceiling_t)3);  // ✅ 게인 상한: 3 (품질 균형)
+    sensor->set_bpc(sensor, 1);               // ✅ BPC: 1 (활성화 - 노이즈 제거)
+    sensor->set_wpc(sensor, 0);               // WPC: 1 (활성화)
+    sensor->set_raw_gma(sensor, 1);           // RAW GMA: 1 (활성화)
+    sensor->set_lenc(sensor, 0);              // 렌즈 보정: 1 (활성화)
     sensor->set_hmirror(sensor, 0);           // 수평 미러: 0 (비활성화)
     sensor->set_vflip(sensor, 0);             // 수직 플립: 0 (비활성화)
-    sensor->set_dcw(sensor, 1);               // DCW: 1 (활성화)
+    sensor->set_dcw(sensor, 0);               // DCW: 1 (활성화)
     sensor->set_colorbar(sensor, 0);          // 컬러 바: 0 (비활성화)
     
     Serial.println("카메라 초기화 완료!");

@@ -226,3 +226,10 @@ pyrightconfig.json
 .ionide
 
 # End of https://www.toptal.com/developers/gitignore/api/python,macos,visualstudiocode
+
+# 프로젝트 특화 설정
+# ESP32-CAM 테스트 이미지
+**/test_images/
+*.jpg
+*.jpeg
+*.png
