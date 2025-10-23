@@ -112,6 +112,11 @@ class AutonomousLaneTrackerV2:
                 clean_mask
             )
 
+            # Ensure command is not None or empty - default to CENTER
+            if not command or command == "STOP":
+                command = "CENTER"
+                confidence = max(confidence, 0.5)  # Ensure minimum confidence
+
             # 8단계: 90도 코너 감지
             if self.corner_detector.is_corner_detected(clean_mask, histogram):
                 self.state = "CORNER_DETECTED"
@@ -124,12 +129,21 @@ class AutonomousLaneTrackerV2:
             else:
                 self.state = "NORMAL_DRIVING"
 
+            # Add direction text for overlay
+            direction_text = {
+                "LEFT": "<<< LEFT <<<",
+                "RIGHT": ">>> RIGHT >>>",
+                "CENTER": ">>> CENTER <<<",
+                "STOP": "--- STOP ---",
+            }.get(command, "")
+
             # 결과 구성
             result = {
                 "command": command,
                 "state": self.state,
                 "histogram": histogram,
                 "confidence": confidence,
+                "direction_text": direction_text,
             }
 
             # 디버그: 시각화
@@ -144,10 +158,10 @@ class AutonomousLaneTrackerV2:
         except Exception as e:
             logger.error(f"프레임 처리 실패: {e}")
             return {
-                "command": "STOP",
+                "command": "CENTER",  # Changed from STOP to CENTER - keep moving forward
                 "state": "ERROR",
                 "histogram": {"left": 0, "center": 0, "right": 0},
-                "confidence": 0.0,
+                "confidence": 0.5,  # Give moderate confidence to continue moving
             }
 
     def _judge_corner_direction(self, image: np.ndarray) -> str:

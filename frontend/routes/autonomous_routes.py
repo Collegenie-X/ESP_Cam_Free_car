@@ -1,7 +1,8 @@
 """
-자율주행 API 라우트
+Autonomous Driving API Routes
 
-자율주행 시작/중지, 상태 조회, 단일 프레임 분석 등을 제공합니다.
+Provides routes for starting/stopping autonomous driving,
+status checking, and single frame analysis.
 """
 
 from flask import Blueprint, jsonify, current_app, request, Response
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 @autonomous_bp.route("/start", methods=["POST"])
 def start_autonomous():
     """
-    자율주행 시작
+    Start autonomous driving
 
     Returns:
         {"success": bool, "message": str}
@@ -30,24 +31,80 @@ def start_autonomous():
                 jsonify(
                     {
                         "success": False,
-                        "error": "자율주행 서비스가 초기화되지 않았습니다",
+                        "error": "Autonomous service not initialized",
                     }
                 ),
                 500,
             )
 
+        # Verify ESP32 connection before starting
+        esp32_service = current_app.config.get("ESP32_SERVICE")
+        if not esp32_service.verify_connection():
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "Cannot connect to ESP32-CAM",
+                    }
+                ),
+                400,
+            )
+
+        # Get initial frame for analysis
+        try:
+            capture_url = esp32_service.get_capture_url()
+            response = requests.get(capture_url, timeout=5)
+
+            if response.status_code == 200:
+                # Decode image
+                nparr = np.frombuffer(response.content, np.uint8)
+                image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+                if image is not None:
+                    # Analyze initial frame
+                    frame_result = auto_service.analyze_single_frame(
+                        image, draw_overlay=True
+                    )
+
+                    if frame_result.get("success"):
+                        # Convert image to base64
+                        processed_image = base64.b64encode(
+                            frame_result["image"]
+                        ).decode("utf-8")
+
+                        # Start autonomous driving
+                        result = auto_service.start()
+
+                        # Add initial frame data
+                        result["initial_frame"] = {
+                            "processed_image": processed_image,
+                            "command": frame_result["command"],
+                            "state": frame_result["state"],
+                            "histogram": frame_result["histogram"],
+                            "confidence": frame_result["confidence"],
+                        }
+
+                        return jsonify(result)
+
+            # If image capture/analysis fails, start without initial frame
+            logger.warning("Could not get initial frame, starting without analysis")
+
+        except Exception as e:
+            logger.error(f"Error getting initial frame: {e}")
+
+        # Start without initial frame if anything fails
         result = auto_service.start()
         return jsonify(result)
 
     except Exception as e:
-        logger.error(f"자율주행 시작 오류: {e}")
+        logger.error(f"Failed to start autonomous driving: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
 @autonomous_bp.route("/stop", methods=["POST"])
 def stop_autonomous():
     """
-    자율주행 중지
+    Stop autonomous driving
 
     Returns:
         {"success": bool, "message": str, "stats": {...}}
@@ -59,24 +116,48 @@ def stop_autonomous():
                 jsonify(
                     {
                         "success": False,
-                        "error": "자율주행 서비스가 초기화되지 않았습니다",
+                        "error": "Autonomous service not initialized",
                     }
                 ),
                 500,
             )
 
+        # Get ESP32 service
+        esp32_service = current_app.config.get("ESP32_SERVICE")
+        if not esp32_service:
+            return (
+                jsonify(
+                    {
+                        "success": False,
+                        "error": "ESP32 service not initialized",
+                    }
+                ),
+                500,
+            )
+
+        # First, try emergency stop
+        logger.info("Executing emergency stop sequence")
+        esp32_service.emergency_stop()
+
+        # Then, stop autonomous service
         result = auto_service.stop()
+
+        # Verify motors are stopped
+        if not esp32_service.verify_motor_stopped():
+            logger.warning("Could not verify motor stop status")
+            result["warning"] = "Motor stop status could not be verified"
+
         return jsonify(result)
 
     except Exception as e:
-        logger.error(f"자율주행 중지 오류: {e}")
+        logger.error(f"Failed to stop autonomous driving: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
 @autonomous_bp.route("/status")
 def get_autonomous_status():
     """
-    자율주행 상태 조회
+    Get autonomous driving status
 
     Returns:
         {
@@ -94,7 +175,7 @@ def get_autonomous_status():
                 jsonify(
                     {
                         "success": False,
-                        "error": "자율주행 서비스가 초기화되지 않았습니다",
+                        "error": "Autonomous service not initialized",
                     }
                 ),
                 500,
@@ -104,17 +185,17 @@ def get_autonomous_status():
         return jsonify({"success": True, **status})
 
     except Exception as e:
-        logger.error(f"자율주행 상태 조회 오류: {e}")
+        logger.error(f"Failed to get autonomous status: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
 @autonomous_bp.route("/analyze", methods=["POST"])
 def analyze_frame():
     """
-    단일 프레임 분석 (테스트용)
+    Analyze single frame (for testing)
 
     Request:
-        - JSON: {"image_url": "http://..."} 또는
+        - JSON: {"image_url": "http://..."} or
         - multipart/form-data: file upload
 
     Returns:
@@ -124,7 +205,7 @@ def analyze_frame():
             "state": str,
             "histogram": {...},
             "confidence": float,
-            "image_base64": str  # 처리된 이미지 (Base64)
+            "image_base64": str  # Processed image (Base64)
         }
     """
     try:
@@ -134,34 +215,34 @@ def analyze_frame():
                 jsonify(
                     {
                         "success": False,
-                        "error": "자율주행 서비스가 초기화되지 않았습니다",
+                        "error": "Autonomous service not initialized",
                     }
                 ),
                 500,
             )
 
-        # 이미지 가져오기
+        # Get image
         image = None
 
-        # 방법 1: JSON으로 URL 전달
+        # Method 1: JSON with URL
         if request.is_json:
             data = request.get_json()
             image_url = data.get("image_url")
 
             if image_url:
-                # ESP32-CAM에서 이미지 가져오기
+                # Get image from ESP32-CAM
                 response = requests.get(image_url, timeout=5)
                 if response.status_code == 200:
                     nparr = np.frombuffer(response.content, np.uint8)
                     image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-        # 방법 2: 파일 업로드
+        # Method 2: File upload
         elif "file" in request.files:
             file = request.files["file"]
             nparr = np.frombuffer(file.read(), np.uint8)
             image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-        # 방법 3: ESP32-CAM에서 직접 캡처
+        # Method 3: Direct capture from ESP32-CAM
         else:
             esp32_service = current_app.config.get("ESP32_SERVICE")
             if esp32_service:
@@ -173,17 +254,17 @@ def analyze_frame():
 
         if image is None:
             return (
-                jsonify({"success": False, "error": "이미지를 가져올 수 없습니다"}),
+                jsonify({"success": False, "error": "Could not get image"}),
                 400,
             )
 
-        # 프레임 분석
+        # Analyze frame
         result = auto_service.analyze_single_frame(image, draw_overlay=True)
 
         if not result["success"]:
             return jsonify(result), 500
 
-        # 이미지를 Base64로 인코딩
+        # Encode image as Base64
         image_base64 = base64.b64encode(result["image"]).decode("utf-8")
 
         return jsonify(
@@ -198,142 +279,112 @@ def analyze_frame():
         )
 
     except Exception as e:
-        logger.error(f"프레임 분석 오류: {e}")
+        logger.error(f"Frame analysis failed: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
 @autonomous_bp.route("/stream")
 def autonomous_stream():
     """
-    자율주행 실시간 스트리밍
-    ESP32-CAM 스트림을 받아서 차선 추적 처리 후 재전송
+    Autonomous driving real-time stream
+    Gets ESP32-CAM stream, processes lane tracking, and re-streams
 
     Returns:
-        MJPEG 스트림
+        MJPEG stream
     """
 
     def generate():
-        """MJPEG 스트림 생성 (5fps 제한)"""
+        """Generate MJPEG stream (limited to 5fps)"""
         import time
         from flask import current_app as app
 
-        # Application context 내에서 서비스 가져오기
+        # Get services within Application context
         with current_app.app_context():
             auto_service = current_app.config.get("AUTONOMOUS_SERVICE")
             esp32_service = current_app.config.get("ESP32_SERVICE")
 
         if not auto_service or not esp32_service:
-            logger.error("서비스가 초기화되지 않았습니다")
+            logger.error("Services not initialized")
             return
 
         try:
+            capture_url = esp32_service.get_capture_url()
+            logger.info(f"Connecting to stream: {capture_url}")
 
-            stream_url = esp32_service.get_stream_url()
-            logger.info(f"스트림 연결 시도: {stream_url}")
-
-            # ESP32-CAM 스트림에 연결 (타임아웃 증가)
-            try:
-                response = requests.get(stream_url, stream=True, timeout=30)
-                if response.status_code != 200:
-                    logger.error(f"ESP32-CAM 스트림 연결 실패: {response.status_code}")
-                    message = "ESP32-CAM 스트림 연결 실패"
-                    yield b"--frame\r\nContent-Type: text/plain\r\n\r\n" + message.encode(
-                        "utf-8"
-                    ) + b"\r\n"
-                    return
-                logger.info("ESP32-CAM 스트림 연결 성공")
-            except requests.exceptions.RequestException as e:
-                logger.error(f"ESP32-CAM 스트림 연결 오류: {e}")
-                message = "ESP32-CAM 연결 오류"
-                yield b"--frame\r\nContent-Type: text/plain\r\n\r\n" + message.encode(
-                    "utf-8"
-                ) + b"\r\n"
-                return
-
-            # 프레임레이트 제한 (5fps = 0.2초 간격)
+            # Frame rate control
             TARGET_FPS = 5
-            FRAME_INTERVAL = 1.0 / TARGET_FPS  # 0.2초
-            last_frame_time = 0
+            FRAME_INTERVAL = 1.0 / TARGET_FPS  # 0.2 seconds
             frame_count = 0
+            last_frame_time = 0
 
-            # MJPEG 스트림 파싱
-            bytes_data = b""
-            for chunk in response.iter_content(chunk_size=1024):
-                bytes_data += chunk
-
-                # JPEG 이미지 찾기
-                a = bytes_data.find(b"\xff\xd8")  # JPEG 시작
-                b = bytes_data.find(b"\xff\xd9")  # JPEG 끝
-
-                if a != -1 and b != -1 and b > a:
-                    jpg = bytes_data[a : b + 2]
-                    bytes_data = bytes_data[b + 2 :]
-
-                    if len(jpg) < 100:  # 너무 작은 JPEG는 무시
-                        logger.warning(f"잘못된 JPEG 데이터 (크기: {len(jpg)} bytes)")
-                        continue
-
-                    logger.debug(f"JPEG 프레임 수신 (크기: {len(jpg)} bytes)")
-
-                    # 프레임레이트 제한 (5fps)
+            while True:
+                try:
+                    # Frame rate limiting
                     current_time = time.time()
                     if current_time - last_frame_time < FRAME_INTERVAL:
-                        continue  # 프레임 스킵
+                        time.sleep(0.01)  # Small sleep to prevent CPU overuse
+                        continue
 
+                    # Get image from ESP32-CAM
+                    response = requests.get(capture_url, timeout=5)
+                    if response.status_code != 200:
+                        logger.error(f"Failed to get image: {response.status_code}")
+                        message = "Failed to get image from ESP32-CAM"
+                        yield b"--frame\r\nContent-Type: text/plain\r\n\r\n" + message.encode(
+                            "utf-8"
+                        ) + b"\r\n"
+                        time.sleep(1)  # Wait before retry
+                        continue
+
+                    # Decode image
+                    nparr = np.frombuffer(response.content, np.uint8)
+                    image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                    if image is None or image.size == 0:
+                        logger.warning("Invalid image data")
+                        continue
+
+                    # Process lane tracking
+                    result = auto_service.process_frame(
+                        image, send_command=True, debug=True
+                    )
+
+                    # Get overlay image
+                    if result.get("success") and "debug_images" in result:
+                        processed_image = result["debug_images"].get("7_final", image)
+                    else:
+                        processed_image = image
+
+                    # Encode as JPEG
+                    _, buffer = cv2.imencode(
+                        ".jpg", processed_image, [cv2.IMWRITE_JPEG_QUALITY, 70]
+                    )
+                    frame = buffer.tobytes()
+
+                    # Send frame
+                    yield (
+                        b"--frame\r\n"
+                        b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
+                    )
+
+                    # Update timing
                     last_frame_time = current_time
                     frame_count += 1
 
-                    # 이미지 디코딩
-                    try:
-                        nparr = np.frombuffer(jpg, np.uint8)
-                        image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                        if image is None or image.size == 0:
-                            logger.warning("이미지 디코딩 실패")
-                            continue
-                        logger.debug(f"이미지 디코딩 성공 (크기: {image.shape})")
-                    except Exception as e:
-                        logger.error(f"이미지 디코딩 오류: {e}")
-                        continue
-
-                    if image is not None:
-                        # 차선 추적 처리 (항상 처리하고 명령은 자율주행 중일 때만 전송)
-                        result = auto_service.process_frame(
-                            image, send_command=True, debug=True
+                    # Log status (every 10 frames)
+                    if frame_count % 10 == 0:
+                        status = "Running" if auto_service.is_running else "Monitoring"
+                        logger.info(
+                            f"Stream status: frames={frame_count}, "
+                            f"state={status}, "
+                            f"command={result.get('command', 'N/A')}"
                         )
 
-                        # 오버레이 이미지 가져오기
-                        if result.get("success") and "debug_images" in result:
-                            processed_image = result["debug_images"].get(
-                                "7_final", image
-                            )
-                        else:
-                            processed_image = image
-
-                        # JPEG로 인코딩 (품질 낮춤 - 부하 감소)
-                        _, buffer = cv2.imencode(
-                            ".jpg", processed_image, [cv2.IMWRITE_JPEG_QUALITY, 70]
-                        )
-                        frame = buffer.tobytes()
-
-                        # MJPEG 형식으로 전송
-                        yield (
-                            b"--frame\r\n"
-                            b"Content-Type: image/jpeg\r\n\r\n" + frame + b"\r\n"
-                        )
-
-                        # 로그 (10프레임마다)
-                        if frame_count % 10 == 0:
-                            status = (
-                                "자율주행 중" if auto_service.is_running else "모니터링"
-                            )
-                            logger.info(
-                                f"스트림 처리 중... 프레임: {frame_count}, "
-                                f"상태: {status}, "
-                                f"명령: {result.get('command', 'N/A')}"
-                            )
+                except Exception as e:
+                    logger.error(f"Stream processing error: {e}")
+                    time.sleep(FRAME_INTERVAL)
 
         except Exception as e:
-            logger.error(f"자율주행 스트리밍 오류: {e}")
+            logger.error(f"Stream generation error: {e}")
 
     return Response(generate(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
@@ -341,14 +392,14 @@ def autonomous_stream():
 @autonomous_bp.route("/check_camera")
 def check_camera():
     """
-    ESP32-CAM 연결 상태 확인
+    Check ESP32-CAM connection status
     """
     try:
         esp32_service = current_app.config.get("ESP32_SERVICE")
         if not esp32_service:
-            return jsonify({"success": False, "error": "ESP32 서비스 없음"}), 500
+            return jsonify({"success": False, "error": "ESP32 service not found"}), 500
 
-        # 1. 기본 연결 확인
+        # 1. Basic connection check
         base_url = esp32_service.base_url
         try:
             response = requests.get(f"{base_url}/status", timeout=5)
@@ -357,38 +408,43 @@ def check_camera():
                     jsonify(
                         {
                             "success": False,
-                            "error": f"ESP32-CAM 응답 없음 (코드: {response.status_code})",
+                            "error": f"ESP32-CAM not responding (code: {response.status_code})",
                         }
                     ),
                     400,
                 )
         except requests.exceptions.RequestException as e:
             return (
-                jsonify({"success": False, "error": f"ESP32-CAM 연결 실패: {str(e)}"}),
+                jsonify(
+                    {
+                        "success": False,
+                        "error": f"ESP32-CAM connection failed: {str(e)}",
+                    }
+                ),
                 400,
             )
 
-        # 2. 스트림 URL - 바로 성공으로 반환 (실제 스트림은 접속 시 확인)
+        # 2. Stream URL - return success (actual stream checked on connection)
         stream_url = esp32_service.get_stream_url()
 
         return jsonify(
             {
                 "success": True,
-                "message": "ESP32-CAM 정상",
+                "message": "ESP32-CAM OK",
                 "base_url": base_url,
                 "stream_url": stream_url,
             }
         )
 
     except Exception as e:
-        logger.error(f"카메라 체크 오류: {e}")
+        logger.error(f"Camera check failed: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
 @autonomous_bp.route("/test")
 def test_autonomous():
     """
-    자율주행 시스템 테스트
+    Test autonomous driving system
 
     Returns:
         {
@@ -414,10 +470,10 @@ def test_autonomous():
             {
                 "success": all_ok,
                 "components": components,
-                "message": "모든 컴포넌트 정상" if all_ok else "일부 컴포넌트 누락",
+                "message": "All components OK" if all_ok else "Missing components",
             }
         )
 
     except Exception as e:
-        logger.error(f"테스트 오류: {e}")
+        logger.error(f"Test failed: {e}")
         return jsonify({"success": False, "error": str(e)}), 500

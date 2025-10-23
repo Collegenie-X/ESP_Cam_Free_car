@@ -65,6 +65,7 @@
             border-radius: 10px;
             overflow: hidden;
             min-height: 400px;
+            margin-bottom: 20px;  /* 결과 패널과의 간격 */
         }
 
         #videoStream {
@@ -152,6 +153,87 @@
         .btn-analyze:hover {
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-analyze.analyzing {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            cursor: wait;
+        }
+        
+        .analysis-timer {
+            margin-top: 10px;
+            text-align: center;
+            color: #667eea;
+            font-weight: bold;
+            font-size: 0.9rem;
+            animation: pulse 1s infinite;
+        }
+        
+        .analysis-result {
+            margin-top: 15px;
+            padding: 10px;  /* 패딩 감소 */
+            background: rgba(0, 0, 0, 0.85);  /* 배경 더 어둡게 */
+            border-radius: 5px;  /* 라운드 감소 */
+            border: 1px solid rgba(102, 126, 234, 0.4);
+            position: absolute;
+            bottom: 10px;  /* 위치 조정 */
+            left: 10px;
+            right: 10px;
+            backdrop-filter: blur(5px);
+            animation: fadeIn 0.3s ease-out;
+            z-index: 10;
+            font-family: 'Courier New', monospace;  /* 고정폭 폰트 */
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .result-item {
+            margin: 8px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .result-label {
+            color: #ffffff;
+            font-size: 0.7rem;  /* 폰트 크기 감소 */
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+            font-family: 'Courier New', monospace;  /* 고정폭 폰트 */
+            text-transform: uppercase;  /* 대문자로 표시 */
+        }
+        
+        .result-value {
+            font-weight: bold;
+            color: #ffffff;
+            font-size: 0.8rem;  /* 폰트 크기 감소 */
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+            font-family: 'Courier New', monospace;  /* 고정폭 폰트 */
+        }
+        
+        .result-value.center {
+            color: #00ff00;  /* 더 밝은 녹색 */
+        }
+        
+        .result-value.left {
+            color: #ff9900;  /* 더 밝은 주황색 */
+        }
+        
+        .result-value.right {
+            color: #ff66ff;  /* 더 밝은 핑크색 */
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateY(-10px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
         }
 
         .btn:disabled {
@@ -333,17 +415,32 @@
             <!-- 왼쪽: 비디오 스트림 -->
             <div class="card">
                 <div class="card-title">📹 실시간 스트림</div>
-                <div class="stream-container">
-                    <img id="videoStream" src="" alt="비디오 스트림">
-                    <div class="stream-overlay" id="streamOverlay">
-                        <div>
-                            <p id="streamStatus">카메라 연결 중...</p>
-                            <button class="btn btn-secondary" onclick="retryStream()" style="margin-top: 15px; display: none;" id="retryButton">
-                                🔄 재시도
-                            </button>
-                        </div>
+            <div class="stream-container">
+                <img id="videoStream" src="" alt="비디오 스트림">
+                <div class="stream-overlay" id="streamOverlay">
+                    <div>
+                        <p id="streamStatus">카메라 연결 중...</p>
+                        <button class="btn btn-secondary" onclick="retryStream()" style="margin-top: 15px; display: none;" id="retryButton">
+                            🔄 재시도
+                        </button>
                     </div>
                 </div>
+                <!-- 분석 결과를 비디오 위에 오버레이 -->
+                <div id="analysisResult" class="analysis-result" style="display: none;">
+                    <div class="result-item">
+                        <span class="result-label">DIRECTION:</span>
+                        <span class="result-value" id="resultCommand">-</span>
+                    </div>
+                    <div class="result-item">
+                        <span class="result-label">STATE:</span>
+                        <span class="result-value" id="resultState">-</span>
+                    </div>
+                    <div class="result-item">
+                        <span class="result-label">CONFIDENCE:</span>
+                        <span class="result-value" id="resultConfidence">-</span>
+                    </div>
+                </div>
+            </div>
                 
                 <!-- 히스토그램 -->
                 <div style="margin-top: 20px;">
@@ -381,9 +478,26 @@
                     <button class="btn btn-stop" id="btnStop" onclick="stopAutonomous()" disabled>
                         ⏹️ 자율주행 중지
                     </button>
-                    <button class="btn btn-analyze" onclick="analyzeSingleFrame()">
+                    <button class="btn btn-analyze" id="btnAnalyze" onclick="analyzeSingleFrame()">
                         🔍 단일 프레임 분석
                     </button>
+                    <div id="analysisTimer" class="analysis-timer" style="display: none;">
+                        분석 결과 표시: <span id="analysisCountdown">5</span>초
+                    </div>
+                    <div id="analysisResult" class="analysis-result" style="display: none;">
+                        <div class="result-item">
+                            <span class="result-label">방향 판단:</span>
+                            <span class="result-value" id="resultCommand">-</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">주행 상태:</span>
+                            <span class="result-value" id="resultState">-</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">신뢰도:</span>
+                            <span class="result-value" id="resultConfidence">-</span>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- 상태 표시 -->
@@ -488,31 +602,84 @@
             }
         }
 
-        // 스트림 초기화
+        // 스트림 초기화 (폴링 방식)
+        let streamInterval = null;
+        let streamFrameCount = 0;
+        
         async function initStream() {
             showStreamStatus('카메라 연결 확인 중...');
             addLog('카메라 연결 확인 중...', 'info');
             
             if (await checkCamera()) {
-                const videoStream = document.getElementById('videoStream');
-                videoStream.src = '/api/autonomous/stream';
-                videoStream.onerror = handleStreamError;
+                addLog('✓ 카메라 연결 확인 완료', 'success');
+                addLog('ESP32-CAM /capture 엔드포인트를 사용하여 스트림 시작...', 'info');
+                startStreamPolling();
+            }
+        }
+        
+        // 스트림 폴링 시작 (only when autonomous is not running)
+        let autonomousRunning = false;
+        
+        function startStreamPolling() {
+            const videoStream = document.getElementById('videoStream');
+            const TARGET_FPS = 5; // 5fps로 제한
+            const FRAME_INTERVAL = 1000 / TARGET_FPS; // 200ms
+            
+            // 기존 폴링 중지
+            if (streamInterval) {
+                clearInterval(streamInterval);
+            }
+            
+            // 첫 프레임 로드
+            loadFrame();
+            
+            // 주기적으로 프레임 로드 (only when autonomous is not running)
+            streamInterval = setInterval(() => {
+                if (!autonomousRunning) {
+                    loadFrame();
+                }
+            }, FRAME_INTERVAL);
+            
+            function loadFrame() {
+                // 타임스탬프를 추가하여 캐시 방지
+                const timestamp = new Date().getTime();
+                const captureUrl = `http://${ESP32_IP}/capture?t=${timestamp}`;
                 
-                // 이미지 로드 성공 시
-                videoStream.onload = () => {
-                    hideStreamStatus();
-                    addLog('✓ 스트림 연결 성공', 'success');
+                const img = new Image();
+                img.onload = function() {
+                    videoStream.src = this.src;
+                    streamFrameCount++;
+                    
+                    // 첫 프레임 로드 시
+                    if (streamFrameCount === 1) {
+                        hideStreamStatus();
+                        addLog('✓ 스트림 연결 성공 (/capture 폴링 방식)', 'success');
+                    }
+                    
+                    // 10 프레임마다 로그
+                    if (streamFrameCount % 50 === 0) {
+                        addLog(`스트림 정상 동작 중 (프레임: ${streamFrameCount})`, 'info');
+                    }
                 };
                 
-                // 10초 후에도 이미지가 없으면 재시도
-                setTimeout(() => {
-                    if (!videoStream.naturalWidth) {
+                img.onerror = function() {
+                    if (streamFrameCount === 0) {
+                        // 첫 프레임 로드 실패
                         handleStreamError();
-                    } else {
-                        hideStreamStatus();
-                        addLog('✓ 스트림 연결 성공', 'success');
                     }
-                }, 10000);
+                    // 이후 프레임은 에러 무시 (네트워크 일시적 문제)
+                };
+                
+                img.src = captureUrl;
+            }
+        }
+        
+        // 스트림 폴링 중지
+        function stopStreamPolling() {
+            if (streamInterval) {
+                clearInterval(streamInterval);
+                streamInterval = null;
+                addLog('스트림 폴링 중지', 'info');
             }
         }
 
@@ -531,11 +698,11 @@
             }
 
             streamRetryCount++;
+            streamFrameCount = 0;
             showStreamStatus('스트림 재연결 중...');
             addLog('스트림 재연결 시도...', 'info');
             
-            const videoStream = document.getElementById('videoStream');
-            videoStream.src = '/api/autonomous/stream?' + new Date().getTime();
+            startStreamPolling();
         }
 
         // 자율주행 시작
@@ -549,14 +716,33 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    addLog('✓ 자율주행 시작됨 - 명령이 ESP32로 전송됩니다', 'success');
+                    addLog('✓ Autonomous driving started - Commands will be sent to ESP32', 'success');
                     document.getElementById('btnStart').disabled = true;
                     document.getElementById('btnStop').disabled = false;
                     
-                    // 상태 폴링 시작
+                    // Mark autonomous as running
+                    autonomousRunning = true;
+                    
+                    // Start status polling
                     startStatusPolling();
+                    
+                    // Update UI with initial processed image if available
+                    if (data.initial_frame && data.initial_frame.processed_image) {
+                        document.getElementById('videoStream').src = 'data:image/jpeg;base64,' + data.initial_frame.processed_image;
+                        
+                        // Update histogram
+                        if (data.initial_frame.histogram) {
+                            updateHistogram(data.initial_frame.histogram);
+                        }
+                        
+                        // Update status
+                        document.getElementById('statusCommand').textContent = data.initial_frame.command || '-';
+                        document.getElementById('statusState').textContent = data.initial_frame.state || '-';
+                        document.getElementById('statusConfidence').textContent = 
+                            data.initial_frame.confidence ? (data.initial_frame.confidence * 100).toFixed(1) + '%' : '-';
+                    }
                 } else {
-                    addLog('✗ 시작 실패: ' + data.message, 'error');
+                    addLog('✗ Start failed: ' + data.message, 'error');
                 }
             } catch (error) {
                 addLog('✗ 오류: ' + error.message, 'error');
@@ -574,9 +760,12 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    addLog('✓ 자율주행 중지됨 - 명령 전송이 중지됩니다 (스트림은 계속 표시)', 'success');
+                    addLog('✓ Autonomous driving stopped - Commands stopped (stream continues)', 'success');
                     document.getElementById('btnStart').disabled = false;
                     document.getElementById('btnStop').disabled = true;
+                    
+                    // Mark autonomous as not running
+                    autonomousRunning = false;
                     
                     // 상태 폴링 중지
                     stopStatusPolling();
@@ -593,9 +782,28 @@
             }
         }
 
+        let analysisTimer = null;  // Timer for analysis display
+        let originalStreamSrc = null;  // Store original stream source
+        let countdownInterval = null;  // Timer for countdown display
+        
         // 단일 프레임 분석
         async function analyzeSingleFrame() {
             try {
+                // Clear existing timers if any
+                if (analysisTimer) {
+                    clearTimeout(analysisTimer);
+                    analysisTimer = null;
+                }
+                if (countdownInterval) {
+                    clearInterval(countdownInterval);
+                    countdownInterval = null;
+                }
+                
+                // Update button state
+                const btnAnalyze = document.getElementById('btnAnalyze');
+                btnAnalyze.classList.add('analyzing');
+                btnAnalyze.disabled = true;
+                
                 addLog('단일 프레임 분석 중...', 'info');
                 
                 const response = await fetch('/api/autonomous/analyze', {
@@ -605,6 +813,46 @@
 
                 if (data.success) {
                     addLog(`✓ 분석 완료: ${data.command} (신뢰도: ${(data.confidence * 100).toFixed(1)}%)`, 'success');
+                    addLog('분석 결과를 5초간 표시합니다...', 'info');
+                    
+                    // Show countdown timer
+                    const timerDiv = document.getElementById('analysisTimer');
+                    const countdownSpan = document.getElementById('analysisCountdown');
+                    timerDiv.style.display = 'block';
+                    let countdown = 5;
+                    
+                    // Show analysis result
+                    const resultDiv = document.getElementById('analysisResult');
+                    resultDiv.style.display = 'block';
+                    resultDiv.style.animation = 'slideIn 0.3s ease-out';
+                    
+                    // Update result values with animation
+                    const resultCommand = document.getElementById('resultCommand');
+                    const resultState = document.getElementById('resultState');
+                    const resultConfidence = document.getElementById('resultConfidence');
+                    
+                    resultCommand.textContent = data.command;
+                    resultCommand.className = 'result-value ' + data.command.toLowerCase();
+                    resultState.textContent = data.state;
+                    resultConfidence.textContent = (data.confidence * 100).toFixed(1) + '%';
+                    
+                    // Update countdown every second
+                    countdownInterval = setInterval(() => {
+                        countdown--;
+                        countdownSpan.textContent = countdown;
+                        if (countdown <= 0) {
+                            clearInterval(countdownInterval);
+                            countdownInterval = null;
+                            timerDiv.style.display = 'none';
+                            resultDiv.style.display = 'none';
+                        }
+                    }, 1000);
+                    
+                    // Store original stream source if not stored
+                    const videoStream = document.getElementById('videoStream');
+                    if (!originalStreamSrc) {
+                        originalStreamSrc = videoStream.src;
+                    }
                     
                     // 결과 표시
                     document.getElementById('statusCommand').textContent = data.command;
@@ -614,9 +862,39 @@
                     // 히스토그램 업데이트
                     updateHistogram(data.histogram);
                     
-                    // 이미지 표시
+                    // 이미지 표시 및 결과 패널 표시
                     if (data.image_base64) {
-                        document.getElementById('videoStream').src = 'data:image/jpeg;base64,' + data.image_base64;
+                        // 이미지 표시
+                        videoStream.src = 'data:image/jpeg;base64,' + data.image_base64;
+                        
+                        // 5초 후 모든 것을 원래대로 복구
+                        analysisTimer = setTimeout(() => {
+                            // 원본 스트림 복구
+                            if (originalStreamSrc) {
+                                videoStream.src = originalStreamSrc;
+                                addLog('분석 결과 표시 종료', 'info');
+                            }
+                            analysisTimer = null;
+                            
+                            // 버튼 상태 초기화
+                            const btnAnalyze = document.getElementById('btnAnalyze');
+                            btnAnalyze.classList.remove('analyzing');
+                            btnAnalyze.disabled = false;
+                            
+                            // 타이머와 결과 패널 숨기기
+                            document.getElementById('analysisTimer').style.display = 'none';
+                            document.getElementById('analysisResult').style.display = 'none';
+                            
+                            // 원본 스트림 폴링 재시작
+                            if (!autonomousRunning) {
+                                startStreamPolling();
+                            }
+                        }, 5000);  // 5초 후 복구
+                        
+                        // 스트림 폴링 일시 중지 (분석 이미지 유지를 위해)
+                        if (streamInterval) {
+                            clearInterval(streamInterval);
+                        }
                     }
                 } else {
                     addLog('✗ 분석 실패: ' + data.error, 'error');
@@ -625,6 +903,21 @@
                 addLog('✗ 오류: ' + error.message, 'error');
             }
         }
+        
+        // Clean up timers when leaving page
+        window.addEventListener('beforeunload', () => {
+            if (analysisTimer) {
+                clearTimeout(analysisTimer);
+            }
+            if (countdownInterval) {
+                clearInterval(countdownInterval);
+            }
+            // Reset UI state
+            const btnAnalyze = document.getElementById('btnAnalyze');
+            btnAnalyze.classList.remove('analyzing');
+            btnAnalyze.disabled = false;
+            document.getElementById('analysisTimer').style.display = 'none';
+        });
 
         // 상태 폴링 시작
         function startStatusPolling() {
@@ -637,6 +930,12 @@
                     console.log('📊 상태 업데이트:', data);
 
                     if (data.success) {
+                        // Update processed image if available (every 1 second)
+                        if (data.latest_image && data.is_running) {
+                            const videoStream = document.getElementById('videoStream');
+                            videoStream.src = 'data:image/jpeg;base64,' + data.latest_image;
+                        }
+                        
                         // 상태 업데이트
                         document.getElementById('statusRunning').textContent = data.is_running ? '실행 중' : '정지';
                         document.getElementById('statusRunning').className = data.is_running ? 'status-value status-running' : 'status-value status-stopped';
@@ -739,7 +1038,14 @@
         window.addEventListener('load', () => {
             addLog('자율주행 모니터링 시스템 준비 완료', 'success');
             addLog(`ESP32-CAM IP: ${ESP32_IP}`, 'info');
+            addLog('카메라 스트림: /capture 폴링 방식 사용', 'info');
             initStream();
+        });
+        
+        // 페이지 언로드 시 정리
+        window.addEventListener('beforeunload', () => {
+            stopStreamPolling();
+            stopStatusPolling();
         });
     </script>
 </body>

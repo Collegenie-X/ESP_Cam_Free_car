@@ -1,12 +1,14 @@
 """
-자율주행 제어 서비스
+Autonomous Driving Control Service
 
-차선 추적 결과를 ESP32-CAM 모터 명령으로 변환하고 실행합니다.
+Processes lane tracking results and converts them into ESP32-CAM motor commands.
 """
 
 import logging
 from typing import Dict, Any, Optional
 import time
+import threading
+import requests
 from services.esp32_communication_service import ESP32CommunicationService
 from ai.core.autonomous_lane_tracker import AutonomousLaneTrackerV2
 import cv2
@@ -16,15 +18,18 @@ logger = logging.getLogger(__name__)
 
 
 class AutonomousDrivingService:
-    """자율주행 제어 서비스 클래스"""
+    """Autonomous driving control service class"""
 
-    # 명령어 매핑 (차선 추적 → ESP32 명령)
+    # Command mapping (Lane tracking → ESP32 commands)
     COMMAND_MAP = {
         "LEFT": "left",
         "RIGHT": "right",
         "CENTER": "center",
-        "STOP": "stop",
+        "STOP": "center",  # Changed default stop to center for continuous movement
     }
+
+    # Default command when no lane is detected
+    DEFAULT_COMMAND = "CENTER"  # Default to moving forward
 
     def __init__(
         self,
@@ -32,34 +37,38 @@ class AutonomousDrivingService:
         lane_tracker: Optional[AutonomousLaneTrackerV2] = None,
     ):
         """
-        자율주행 서비스 초기화
+        Initialize autonomous driving service
 
         Args:
-            esp32_service: ESP32 통신 서비스
-            lane_tracker: 차선 추적기 (None이면 기본 생성)
+            esp32_service: ESP32 communication service
+            lane_tracker: Lane tracker (creates default if None)
         """
         self.esp32_service = esp32_service
         self.lane_tracker = lane_tracker or AutonomousLaneTrackerV2()
         self.is_running = False
         self.last_command = None
-        self.command_history = []  # 최근 10개 명령 저장
+        self.command_history = []  # Keep last 10 commands
         self.stats = {
             "frames_processed": 0,
             "commands_sent": 0,
             "errors": 0,
             "start_time": None,
         }
-        logger.info("자율주행 서비스 초기화 완료")
+        self._polling_thread = None
+        self._stop_polling = False
+        self.latest_processed_image = None  # Store latest processed image for display
+        self.last_image_update_time = 0  # Track last update time
+        logger.info("Autonomous driving service initialized")
 
     def start(self) -> Dict[str, Any]:
         """
-        자율주행 시작
+        Start autonomous driving (background /capture polling)
 
         Returns:
             {"success": bool, "message": str}
         """
         if self.is_running:
-            return {"success": False, "message": "이미 자율주행 중입니다"}
+            return {"success": False, "message": "Autonomous driving already running"}
 
         self.is_running = True
         self.stats["start_time"] = time.time()
@@ -67,22 +76,50 @@ class AutonomousDrivingService:
         self.stats["commands_sent"] = 0
         self.stats["errors"] = 0
         self.command_history = []
+        self._stop_polling = False
 
-        logger.info("자율주행 시작")
-        return {"success": True, "message": "자율주행을 시작했습니다"}
+        # Start background thread
+        self._polling_thread = threading.Thread(target=self._polling_loop, daemon=True)
+        self._polling_thread.start()
+
+        logger.info("Started autonomous driving (background /capture polling)")
+        return {"success": True, "message": "Started autonomous driving"}
 
     def stop(self) -> Dict[str, Any]:
         """
-        자율주행 중지
+        Stop autonomous driving
 
         Returns:
             {"success": bool, "message": str}
         """
         if not self.is_running:
-            return {"success": False, "message": "자율주행이 실행 중이 아닙니다"}
+            return {"success": False, "message": "Autonomous driving not running"}
 
-        # 모터 정지 명령 전송
-        self.esp32_service.send_command("control", {"cmd": "stop"})
+        # Stop polling thread
+        self._stop_polling = True
+        if self._polling_thread and self._polling_thread.is_alive():
+            self._polling_thread.join(timeout=2.0)
+
+        # Gradually slow down instead of immediate stop
+        try:
+            # Send center command first to straighten the car
+            self.esp32_service.send_command("control", {"cmd": "center"})
+            time.sleep(0.2)  # Wait briefly
+
+            # Then send stop command
+            stop_response = self.esp32_service.send_command("control", {"cmd": "stop"})
+            if not stop_response.get("success"):
+                logger.error(f"Failed to send stop command: {stop_response}")
+
+            # Verify the stop command
+            verify_response = self.esp32_service.send_command("status")
+            if verify_response.get("success"):
+                logger.info("Verified stop command")
+            else:
+                logger.warning("Could not verify stop command")
+
+        except Exception as e:
+            logger.error(f"Error during stop sequence: {e}")
 
         self.is_running = False
         elapsed = (
@@ -90,27 +127,112 @@ class AutonomousDrivingService:
         )
 
         logger.info(
-            f"자율주행 중지 (처리 프레임: {self.stats['frames_processed']}, "
-            f"명령 전송: {self.stats['commands_sent']}, "
-            f"경과 시간: {elapsed:.1f}초)"
+            f"Stopped autonomous driving (frames: {self.stats['frames_processed']}, "
+            f"commands: {self.stats['commands_sent']}, "
+            f"time: {elapsed:.1f}s)"
         )
 
         return {
             "success": True,
-            "message": "자율주행을 중지했습니다",
+            "message": "Stopped autonomous driving",
             "stats": self.get_stats(),
         }
+
+    def _polling_loop(self):
+        """
+        Background loop for /capture polling and lane tracking
+        """
+        logger.info("Starting polling loop")
+        capture_url = self.esp32_service.get_capture_url()
+        TARGET_FPS = 5  # Fixed at 5fps
+        FRAME_INTERVAL = 1.0 / TARGET_FPS  # 0.2 seconds
+
+        # Send initial forward command
+        self._send_command_to_esp32(self.DEFAULT_COMMAND)
+
+        frame_counter = 0  # Track frames for debug image generation
+
+        while not self._stop_polling and self.is_running:
+            try:
+                start_time = time.time()
+
+                # Get image from ESP32-CAM
+                response = requests.get(capture_url, timeout=2)
+                if response.status_code != 200:
+                    logger.warning(f"Failed to capture image: {response.status_code}")
+                    self.stats["errors"] += 1
+                    time.sleep(FRAME_INTERVAL)
+                    continue
+
+                # Decode image
+                nparr = np.frombuffer(response.content, np.uint8)
+                image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+                if image is None or image.size == 0:
+                    logger.warning("Failed to decode image")
+                    self.stats["errors"] += 1
+                    time.sleep(FRAME_INTERVAL)
+                    continue
+
+                frame_counter += 1
+                current_time = time.time()
+
+                # Generate debug image only once per second
+                # This reduces processing load significantly
+                should_generate_debug = (
+                    current_time - self.last_image_update_time >= 1.0
+                )
+
+                # Process lane tracking
+                # Use debug=True only when we need to update the display image (1fps)
+                # Otherwise use debug=False for faster processing (4fps)
+                result = self.process_frame(
+                    image, send_command=True, debug=should_generate_debug
+                )
+
+                if result.get("success"):
+                    logger.debug(
+                        f"Frame {frame_counter}: command={result['command']}, "
+                        f"confidence={result['confidence']:.2f}, "
+                        f"debug={'ON' if should_generate_debug else 'OFF'}"
+                    )
+
+                    # Store debug image when generated
+                    if should_generate_debug and "debug_images" in result:
+                        processed_image = result["debug_images"].get("7_final", image)
+                        # Encode and store
+                        _, buffer = cv2.imencode(
+                            ".jpg", processed_image, [cv2.IMWRITE_JPEG_QUALITY, 85]
+                        )
+                        self.latest_processed_image = buffer.tobytes()
+                        self.last_image_update_time = current_time
+                        logger.info(f"Updated display image at frame {frame_counter}")
+                else:
+                    logger.warning(f"Frame processing failed: {result.get('error')}")
+
+                # Limit frame rate
+                elapsed = time.time() - start_time
+                sleep_time = max(0, FRAME_INTERVAL - elapsed)
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
+
+            except Exception as e:
+                logger.error(f"Polling loop error: {e}")
+                self.stats["errors"] += 1
+                time.sleep(FRAME_INTERVAL)
+
+        logger.info("Polling loop ended")
 
     def process_frame(
         self, image: np.ndarray, send_command: bool = True, debug: bool = False
     ) -> Dict[str, Any]:
         """
-        프레임 처리 및 자율주행 제어
+        Process frame and control autonomous driving
 
         Args:
-            image: 카메라 이미지 (BGR)
-            send_command: ESP32에 명령 전송 여부
-            debug: 디버그 모드
+            image: Camera image (BGR)
+            send_command: Whether to send command to ESP32
+            debug: Debug mode
 
         Returns:
             {
@@ -120,30 +242,37 @@ class AutonomousDrivingService:
                 "histogram": {...},
                 "confidence": float,
                 "sent_to_esp32": bool,
-                "debug_images": {...}  # debug=True일 때만
+                "debug_images": {...}  # Only in debug mode
             }
         """
         try:
-            # 차선 추적 처리
+            # Process lane tracking
             result = self.lane_tracker.process_frame(image, debug=debug)
+
+            # If no command or low confidence, use default command (CENTER)
+            if not result.get("command") or result.get("confidence", 0) < 0.3:
+                result["command"] = self.DEFAULT_COMMAND
+                result["confidence"] = (
+                    0.5  # Set moderate confidence for default command
+                )
 
             self.stats["frames_processed"] += 1
 
-            # ESP32 명령 전송 (자율주행 중일 때만)
+            # Send ESP32 command (only when autonomous driving)
             sent_to_esp32 = False
             if self.is_running and send_command and result["command"]:
                 sent_to_esp32 = self._send_command_to_esp32(result["command"])
 
-            # 명령 히스토리 저장 (최근 10개, 히스토그램 포함)
-            self.command_history.append(
-                {
-                    "command": result["command"],
-                    "confidence": result["confidence"],
-                    "histogram": result["histogram"],
-                    "state": result["state"],
-                    "timestamp": time.time(),
-                }
-            )
+            # Save command history (last 10, without images to avoid JSON serialization issues)
+            history_entry = {
+                "command": result["command"],
+                "confidence": result["confidence"],
+                "histogram": result["histogram"],
+                "state": result["state"],
+                "timestamp": time.time(),
+            }
+
+            self.command_history.append(history_entry)
             if len(self.command_history) > 10:
                 self.command_history.pop(0)
 
@@ -159,74 +288,99 @@ class AutonomousDrivingService:
 
         except Exception as e:
             self.stats["errors"] += 1
-            logger.error(f"프레임 처리 실패: {e}")
+            logger.error(f"Frame processing failed: {e}")
             return {"success": False, "error": str(e)}
 
     def _send_command_to_esp32(self, command: str) -> bool:
         """
-        ESP32에 명령 전송 (중복 명령 필터링)
+        Send command to ESP32 (with duplicate filtering)
 
         Args:
             command: "LEFT" | "RIGHT" | "CENTER" | "STOP"
 
         Returns:
-            전송 성공 여부
+            Success status
         """
-        # 동일 명령 중복 전송 방지
+        # Prevent duplicate commands
         if command == self.last_command:
-            logger.debug(f"중복 명령 무시: {command}")
+            logger.debug(f"Ignoring duplicate command: {command}")
             return False
 
-        # ESP32 명령으로 변환
+        # Convert to ESP32 command
         esp32_cmd = self.COMMAND_MAP.get(command)
         if not esp32_cmd:
-            logger.warning(f"알 수 없는 명령: {command}")
+            logger.warning(f"Unknown command: {command}")
             return False
 
-        # 명령 전송
+        # Send command
         try:
-            logger.info(f"🚗 ESP32로 명령 전송 시도: {command} → {esp32_cmd}")
-            response = self.esp32_service.send_command("/control", {"cmd": esp32_cmd})
+            logger.info(f"🚗 Sending command to ESP32: {command} → {esp32_cmd}")
+            response = self.esp32_service.send_command("control", {"cmd": esp32_cmd})
             if response.get("success"):
                 self.last_command = command
                 self.stats["commands_sent"] += 1
-                logger.info(f"✓ 명령 전송 성공: {command} → {esp32_cmd}")
+                logger.info(f"✓ Command sent successfully: {command} → {esp32_cmd}")
                 return True
             else:
-                logger.warning(f"✗ 명령 전송 실패: {response}")
+                logger.warning(f"✗ Command failed: {response}")
                 return False
 
         except Exception as e:
             self.stats["errors"] += 1
-            logger.error(f"✗ ESP32 명령 전송 오류: {e}")
+            logger.error(f"✗ ESP32 command error: {e}")
             return False
 
     def get_status(self) -> Dict[str, Any]:
         """
-        자율주행 상태 조회
+        Get autonomous driving status
 
         Returns:
             {
                 "is_running": bool,
                 "last_command": str,
                 "state": str,
-                "stats": {...}
+                "stats": {...},
+                "latest_image": str (base64) or None
             }
         """
-        return {
+        import base64
+
+        # Clean command history for JSON serialization (remove any bytes data)
+        clean_history = []
+        for entry in self.command_history[-5:]:
+            clean_entry = {
+                "command": entry.get("command"),
+                "confidence": entry.get("confidence"),
+                "histogram": entry.get("histogram"),
+                "state": entry.get("state"),
+                "timestamp": entry.get("timestamp"),
+            }
+            clean_history.append(clean_entry)
+
+        status = {
             "is_running": self.is_running,
             "last_command": self.last_command,
             "state": self.lane_tracker.state,
-            "command_history": self.command_history[-5:],  # 최근 5개
+            "command_history": clean_history,  # Cleaned history without bytes
             "stats": self.get_stats(),
         }
 
+        # Add latest processed image if available
+        if self.latest_processed_image:
+            status["latest_image"] = base64.b64encode(
+                self.latest_processed_image
+            ).decode("utf-8")
+        else:
+            status["latest_image"] = None
+
+        return status
+
     def get_stats(self) -> Dict[str, Any]:
         """
-        통계 정보 조회
+        Get statistics
 
         Returns:
-            통계 딕셔너리
+            Statistics dictionary
         """
         elapsed = (
             time.time() - self.stats["start_time"] if self.stats["start_time"] else 0
@@ -245,26 +399,26 @@ class AutonomousDrivingService:
         self, image: np.ndarray, draw_overlay: bool = True
     ) -> Dict[str, Any]:
         """
-        단일 프레임 분석 (자율주행 시작 없이)
+        Analyze single frame (without starting autonomous driving)
 
         Args:
-            image: 카메라 이미지
-            draw_overlay: 오버레이 그리기
+            image: Camera image
+            draw_overlay: Draw overlay
 
         Returns:
-            분석 결과 + 처리된 이미지
+            Analysis result + processed image
         """
         try:
-            # 차선 추적
+            # Process lane tracking
             result = self.lane_tracker.process_frame(image, debug=True)
 
-            # 오버레이 이미지 생성
+            # Create overlay image
             if draw_overlay and "debug_images" in result:
                 overlay_image = result["debug_images"].get("7_final", image)
             else:
                 overlay_image = image
 
-            # JPEG로 인코딩
+            # Encode as JPEG
             _, buffer = cv2.imencode(
                 ".jpg", overlay_image, [cv2.IMWRITE_JPEG_QUALITY, 85]
             )
@@ -281,5 +435,5 @@ class AutonomousDrivingService:
             }
 
         except Exception as e:
-            logger.error(f"단일 프레임 분석 실패: {e}")
+            logger.error(f"Single frame analysis failed: {e}")
             return {"success": False, "error": str(e)}

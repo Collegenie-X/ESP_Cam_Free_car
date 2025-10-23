@@ -56,9 +56,9 @@ class SteeringJudge:
         total_count = left_count + center_count + right_count
 
         # 판단 로직
-        # 1. 차선 거의 없음
+        # 1. 차선 거의 없음 - 직진 유지 (변경: STOP -> CENTER)
         if total_count < self.threshold_min_pixels:
-            return "STOP", histogram, 0.0
+            return "CENTER", histogram, 0.3  # Low confidence but keep moving forward
 
         # 2. 좌우 차이가 작음 (데드존)
         diff = abs(left_count - right_count)
