@@ -337,3 +337,4 @@ class AutonomousDriver:
             "center_ratio": self.command_history["center"]
             / max(self.total_commands, 1),
         }
+
