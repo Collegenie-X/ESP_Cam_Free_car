@@ -1,0 +1,33 @@
+"""
+라인 트래킹 설정 파일
+"""
+
+# ESP32-CAM 연결 설정
+ESP32_IP = "192.168.0.65"
+ESP32_BASE_URL = f"http://{ESP32_IP}"
+
+# 영상 설정
+CAMERA_WIDTH = 320
+CAMERA_HEIGHT = 240
+CAPTURE_FPS = 10  # 초당 프레임 수
+
+# 라인 검출 설정
+CANNY_LOW_THRESHOLD = 85
+CANNY_HIGH_THRESHOLD = 85
+HOUGH_THRESHOLD = 10
+MIN_LINE_LENGTH = 10
+MAX_LINE_GAP = 10
+ROI_BOTTOM_RATIO = 0.5  # 화면 하단 50%만 분석
+
+# 방향 판단 설정
+DEADZONE_THRESHOLD = 30  # 픽셀 (이 범위 내면 직진)
+STRONG_TURN_THRESHOLD = 80  # 픽셀
+
+# 디버깅 설정
+SHOW_DEBUG_WINDOW = True
+SHOW_PROCESSED_IMAGE = True
+LOG_LEVEL = "INFO"  # DEBUG, INFO, WARNING, ERROR
+
+# 명령 전송 설정
+COMMAND_TIMEOUT = 2  # 초
+ENABLE_COMMAND_SEND = True  # False로 설정하면 명령 전송 안 함 (테스트용)

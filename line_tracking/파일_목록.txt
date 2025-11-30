@@ -1,0 +1,41 @@
+라인 트래킹 시스템 - 생성된 파일 목록
+========================================
+
+📦 핵심 모듈 (Python)
+--------------------
+✅ __init__.py                      - 패키지 초기화
+✅ config.py                        - 설정 파일 (802 bytes)
+✅ line_detector_module.py          - 라인 검출 모듈 (4.0 KB)
+✅ direction_judge_module.py        - 방향 판단 모듈 (2.4 KB)
+✅ visualization_module.py          - 시각화 모듈 (4.5 KB)
+✅ main_line_tracker.py             - 메인 실행기 (6.8 KB)
+
+🧪 테스트
+---------
+✅ test_modules.py                  - 단위 테스트 (4.6 KB)
+
+🚀 실행 스크립트
+----------------
+✅ run_line_tracker.sh              - 실행 스크립트 (368 bytes)
+
+📚 문서 (Markdown)
+------------------
+✅ README.md                        - 전체 시스템 설명 (7.5 KB)
+✅ QUICKSTART.md                    - 빠른 시작 가이드 (2.1 KB)
+✅ 실행_가이드.md                    - 실행 방법 상세 (8.9 KB)
+✅ 프로젝트_요약.md                  - 프로젝트 요약 (11.2 KB)
+✅ 파일_목록.txt                    - 이 문서
+
+📊 통계
+-------
+총 파일 수: 13개
+- Python 파일: 6개 (~620 라인)
+- Markdown 문서: 4개 (~1,500 라인)
+- Shell 스크립트: 1개
+- 기타: 2개
+
+총 코드 크기: ~52 KB
+총 문서 크기: ~30 KB
+
+✅ 모든 파일 생성 완료!
+
